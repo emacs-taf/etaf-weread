@@ -248,9 +248,20 @@
 ;; Variable: etaf-weread-settings-file
 ;; File that stores the reading preferences between sessions, default
 ;; `<user-emacs-directory>/etaf-weread/settings.eld'.
-;; It keeps the chosen appearance and reading column width.  Bind it before
-;; creating a session to keep several profiles apart; the session remembers
-;; the file it was created with, including when writing.
+;; It keeps the chosen appearance, the reading column width, the column count
+;; and where reading stopped in each local book.  Bind it before creating a
+;; session to keep several profiles apart; the session remembers the file it
+;; was created with, including when writing.
+;;
+;; Variable: etaf-weread-remember-positions
+;; Whether the reader returns to where each local book was left, default t.
+;; The chapter is restored exactly and the position inside it is a fraction of
+;; the chapter, so it survives a different frame size or reading width; at most
+;; fifty books keep a position.
+;;
+;; Variable: etaf-weread-position-save-delay
+;; Seconds of quiet before a scrolled position is stored, default 1.5.
+;; A chapter change, leaving the reader and closing the session store it at once.
 ;;
 ;; Variable: etaf-weread-index-file
 ;; SQLite file of the local highlight index, default
@@ -282,7 +293,8 @@
 ;; count.  The file is read from disk, so no backend and no account is
 ;; involved; an unreadable or unsupported file signals `etaf-weread-error'.
 ;; While a chapter is open the reading pane owns the frame's body in every
-;; layout, and `etaf-weread-toggle-pane' leaves it for the book card.
+;; layout, and `etaf-weread-toggle-pane' leaves it for the book card.  A book
+;; with a stored position continues in that chapter and place.
 ;;
 ;; Function: etaf-weread-read-chapter (app index)
 ;;;###autoload (autoload 'etaf-weread-read-chapter "etaf-weread" nil t)

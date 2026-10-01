@@ -891,6 +891,51 @@ because it carries the chapter heading."
             (should (= 2 (plist-get (etaf-weread-state app) :reader-shown))))
         (kill-buffer buffer)))))
 
+(ert-deftest etaf-weread-tests-remembers-the-reading-position ()
+  "Reopening a local book continues where the last session stopped.
+The chapter is restored exactly and the position inside it is stored as a
+fraction, so it survives even a different reading width or frame size."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((file (make-temp-file "weread-position-" nil ".eld"))
+           (etaf-weread-tests--settings file)
+           (etaf-weread-position-save-delay 0)
+           ;; A book long enough that the first chapter scrolls.
+           (path (expand-file-name "long.txt" directory)))
+      (unwind-protect
+          (progn
+            (with-temp-file path
+              (insert "第一章 长文\n")
+              (dotimes (index 40)
+                (insert (format "第%d段：这是用来填满阅读栏的一段文字，反复出现以便产生足够的行数。\n\n"
+                                index)))
+              (insert "第二章 短章\n这一章很短，只用来验证章位的恢复。\n"))
+            (let ((app (etaf-weread-tests--session)))
+              (etaf-weread-locate app :local)
+              (etaf-weread-open-local-book app path)
+              (should (= 24 (etaf-weread-adjust-reading-measure app -20)))
+              (etaf-weread-scroll-pane app 6)
+              (sleep-for 0.05)
+              (should (= 6 (plist-get (etaf-weread-state app) :pane-scroll))))
+            ;; The next session continues in the same chapter and place, and a
+            ;; chapter turned in between is the one a later session restores.
+            (let* ((again (etaf-weread-tests--session))
+                   (state nil))
+              (etaf-weread-locate again :local)
+              (etaf-weread-open-local-book again path)
+              (setq state (etaf-weread-state again))
+              (should (= 0 (plist-get (plist-get state :local) :index)))
+              (should (= 6 (plist-get state :pane-scroll)))
+              (should (= 2 (etaf-weread-read-chapter again 2))))
+            (let* ((third (etaf-weread-tests--session))
+                   (state nil))
+              (etaf-weread-locate third :local)
+              (etaf-weread-open-local-book third path)
+              (setq state (etaf-weread-state third))
+              (should (= 1 (plist-get (plist-get state :local) :index)))
+              (should (= 0 (plist-get state :pane-scroll)))))
+        (ignore-errors (delete-file file))))))
+
 (ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()
   "SPC and M-v scroll a long detail pane from the keyboard.
 The wheel scrolls the pane under the pointer; without keys a keyboard-only

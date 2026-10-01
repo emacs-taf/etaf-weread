@@ -15,6 +15,9 @@ All notable user-visible changes to ETAF Weread.
   book's own list, and `v` returns to the book list.
 - Reading preferences (palette, column width, one or two columns) are stored
   in `etaf-weread-settings-file` and restored by the next session.
+- A local book reopens where the last session stopped: the chapter is
+  restored exactly and the position inside it as a fraction, so it survives
+  a different frame size or reading width.
 - First complete reader: shelf with all/reading/finished filters, notebook,
   book detail with table of contents, highlights grouped by chapter, store
   search, reading statistics, Markdown export and opening a book in the web

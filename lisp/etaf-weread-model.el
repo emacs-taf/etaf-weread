@@ -153,11 +153,31 @@ reader's `m' key cycles the choice and it is stored in
 (defcustom etaf-weread-settings-file
   (locate-user-emacs-file "etaf-weread/settings.eld")
   "File that stores the reading preferences between sessions.
-It keeps the chosen appearance and reading column width, so a new session
-starts where the last one left off.  Bind it before creating a session to keep
-several profiles apart."
+It keeps the chosen appearance, the reading width, the column count and where
+reading stopped in every local book, so a new session starts where the last
+one left off.  Bind it before creating a session to keep several profiles
+apart."
   :type 'file
   :group 'etaf-weread)
+
+(defcustom etaf-weread-remember-positions t
+  "Whether the reader returns to where each local book was left.
+The chapter and the position inside it are stored in
+`etaf-weread-settings-file', and opening the book again continues from there.
+The position inside a chapter is a fraction, so it survives a different frame
+size or reading width."
+  :type 'boolean
+  :group 'etaf-weread)
+
+(defcustom etaf-weread-position-save-delay 1.5
+  "Seconds of quiet before a scrolled position is stored.
+Scrolling writes often, and the preference file is small but not free, so a
+scrolled position settles before it is written."
+  :type 'number
+  :group 'etaf-weread)
+
+(defconst etaf-weread--position-limit 50
+  "Local books whose reading position is kept.")
 
 ;;; ---------------------------------------------------------------------------
 ;;; Reading preferences
@@ -187,7 +207,8 @@ signalling: losing a preference must not interrupt the reading."
         (with-temp-file file
           (prin1 (list :theme etaf-weread-theme-mode
                        :reader-measure (etaf-weread--read app :reader-measure)
-                       :reader-spread (etaf-weread--read app :reader-spread))
+                       :reader-spread (etaf-weread--read app :reader-spread)
+                       :positions (plist-get app :positions))
                  (current-buffer))))
     (error
      (etaf-weread--write app :message
@@ -221,6 +242,9 @@ other Lisp callers."
     (list :client client
           :buffer nil
           :settings-file etaf-weread-settings-file
+          :positions (let ((stored (plist-get settings :positions)))
+                       (and (listp stored) stored))
+          :position-timer nil
           :disposed nil
           :started-at nil
           :follow-timer nil
@@ -583,6 +607,9 @@ Return the number of chapters the book has.  An unreadable or unsupported file
 signals `etaf-weread-error'."
   (let* ((content (etaf-weread-library-content path))
          (chapters (plist-get content :chapters)))
+    ;; The reading budget and the column count come from the window, so fit the
+    ;; layout before a chapter is wrapped and a stored position is applied.
+    (etaf-weread--sync-layout app)
     (etaf-batch
       (etaf-weread--write app :local
                           (list :path path
@@ -592,7 +619,76 @@ signals `etaf-weread-error'."
                                 :index 0))
       (etaf-weread--write app :pane-scroll 0))
     (etaf-weread--publish-local-chapter app)
+    (etaf-weread--restore-position app)
     (length chapters)))
+
+(defun etaf-weread--position-record (app)
+  "Return APP's reading position as a plist, or nil when nothing is open.
+The position inside the chapter is a fraction of its scrollable rows, so it
+survives a different frame size or reading width."
+  (let* ((local (etaf-weread--read app :local))
+         (path (plist-get local :path))
+         (chapters (length (plist-get local :chapters))))
+    (when (and path (> chapters 0))
+      (let* ((rows (max 1 (etaf-weread--pane-page-rows app)))
+             (total (max 1 (etaf-weread--read app :pane-total)))
+             (span (max 1 (- total rows)))
+             (scroll (etaf-weread--read app :pane-scroll)))
+        (list :path path
+              :chapter (or (plist-get local :index) 0)
+              :fraction (min 1.0 (max 0.0 (/ (float scroll) span)))
+              :at (float-time))))))
+
+(defun etaf-weread--remember-position (app)
+  "Store APP's current reading position, newest first, for the next session.
+A book keeps one position: reading it again replaces the previous one, and
+only the most recent `etaf-weread--position-limit' books are kept."
+  (when etaf-weread-remember-positions
+    (when-let* ((record (etaf-weread--position-record app)))
+      (let* ((path (plist-get record :path))
+             (kept (seq-remove (lambda (entry)
+                                 (equal (plist-get entry :path) path))
+                               (plist-get app :positions))))
+        (setf (plist-get app :positions)
+              (seq-take (cons record kept) etaf-weread--position-limit))
+        (etaf-weread--settings-write app)
+        record))))
+
+(defun etaf-weread--schedule-position-save (app)
+  "Store APP's reading position once the scrolling settles."
+  (when (and etaf-weread-remember-positions
+             (plist-get (etaf-weread--read app :local) :chapters))
+    (when-let* ((timer (plist-get app :position-timer)))
+      (cancel-timer timer))
+    (setf (plist-get app :position-timer)
+          (run-at-time etaf-weread-position-save-delay nil
+                       (lambda ()
+                         (setf (plist-get app :position-timer) nil)
+                         (unless (plist-get app :disposed)
+                           (etaf-weread--remember-position app)))))))
+
+(defun etaf-weread--restore-position (app)
+  "Continue APP's local book where the last session left it.
+The chapter is restored exactly and the position inside it from the stored
+fraction, so a different frame size or reading width still lands in the same
+place.  A book without a stored position keeps its first chapter."
+  (when etaf-weread-remember-positions
+    (let* ((local (etaf-weread--read app :local))
+           (entry (seq-find (lambda (item)
+                              (equal (plist-get item :path) (plist-get local :path)))
+                            (plist-get app :positions))))
+      (when entry
+        (etaf-weread-read-chapter app (1+ (or (plist-get entry :chapter) 0)))
+        (let* ((rows (max 1 (etaf-weread--pane-page-rows app)))
+               (total (max 1 (etaf-weread--read app :pane-total)))
+               (span (max 0 (- total rows)))
+               (scroll (round (* (or (plist-get entry :fraction) 0.0) span))))
+          (etaf-batch
+            (etaf-weread--write app :pane-scroll scroll))
+          (etaf-weread--update-reader-progress app)
+          ;; `etaf-weread-read-chapter' recorded the top of the chapter on its
+          ;; way here; correct the record to the restored position.
+          (etaf-weread--remember-position app))))))
 
 (defun etaf-weread-read-chapter (app index)
   "Show chapter INDEX (counting from 1) of APP's opened local book.
@@ -607,6 +703,7 @@ Return the chapter index actually shown."
           (etaf-weread--write app :local local)
           (etaf-weread--write app :pane-scroll 0))
         (etaf-weread--publish-local-chapter app)
+        (etaf-weread--remember-position app)
         (1+ next)))))
 
 (defun etaf-weread-toggle-zen (app)
@@ -1251,7 +1348,8 @@ scrolling inside one chapter moves the number as a reader expects."
                         (max 0 (min (+ (etaf-weread--read app :pane-scroll) delta)
                                     (max 0 (- total size)))))
     (when (eq (etaf-weread--effective-pane app) 'reader)
-      (etaf-weread--update-reader-progress app))))
+      (etaf-weread--update-reader-progress app)
+      (etaf-weread--schedule-position-save app))))
 
 (defun etaf-weread-reader-url (item)
   "Return the WeChat Reading URL of ITEM, or nil.
@@ -1769,7 +1867,13 @@ sent when the account asks for it or when a load is due."
   (add-hook 'window-size-change-functions #'etaf-weread--window-size-change))
 
 (defun etaf-weread--dispose (app)
-  "Release APP's follow timer, local index and in-flight requests."
+  "Release APP's timers, local index and in-flight requests.
+A position still waiting to be stored is written first, so closing the reader
+keeps the place even when the scroll had not settled yet."
+  (when-let* ((timer (plist-get app :position-timer)))
+    (cancel-timer timer)
+    (setf (plist-get app :position-timer) nil)
+    (etaf-weread--remember-position app))
   (setf (plist-get app :disposed) t)
   (cl-incf (plist-get app :index-generation))
   (setf (plist-get app :index-pending) nil)

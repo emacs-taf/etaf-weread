@@ -157,6 +157,11 @@
       "purpose": "The reading width and the chosen appearance are stored in the settings file and a new session starts with them."
     },
     {
+      "name": "etaf-weread-tests-remembers-the-reading-position",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A local book reopens in the chapter and place the last session stopped at, with the position inside the chapter stored as a fraction."
+    },
+    {
       "name": "etaf-weread-tests-local-rows-do-not-ask-the-shelf",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Selecting a local row never requests it from the backend while a store row still follows the selection."

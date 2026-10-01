@@ -56,7 +56,11 @@ file into chapters and starts reading:
   and `f` again brings the reader back; `T` cycles the palette;
 - the reading head names the book, the chapter number and the chapter title,
   and the file is read from disk, so the account and the backend stay
-  untouched.
+  untouched;
+- reopening a book continues where the last session stopped: the chapter is
+  restored exactly and the position inside it as a fraction, so a different
+  frame size or reading width lands in the same place
+  (`etaf-weread-remember-positions' turns it off).
 
 Only files the person already holds are read; a WeChat Reading title whose text
 lives behind the site's reader still opens in the browser with `o`.
