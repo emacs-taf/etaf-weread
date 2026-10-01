@@ -23,6 +23,11 @@ row carrying a larger `:font-size` makes the canvas taller in pixels than the
 rows it was budgeted for, and the window silently clips its bottom rows.  Use
 weight and colour for emphasis instead, or reserve whole `lh` rows for a larger
 element.
+Fallback fonts are common offenders: a symbol can use Sarasa at 18px or Arial
+Unicode at 19px, and a bold symbol can make the row taller still.  Prefer CJK
+glyph icons, leave symbols unbolded, and never use inline `:font-size` in a row.
+Validate with `etaf-weread-gui-check` in `scripts/weread-gui-probe.el`: canvas
+pixels must equal window pixels and no row may be taller.
 
 ## Data flow
 
