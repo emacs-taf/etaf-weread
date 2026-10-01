@@ -93,12 +93,15 @@ side pane, and o opens the selected book in the browser.")
                 ;; minor-mode map, which wins over a major-mode map.  The reader
                 ;; replaces them, so it owns them here where it can win; the
                 ;; mode map keeps the documented bindings for a buffer that was
-                ;; never opened.  TAB and focused RET activation stay with the
-                ;; renderer.
+                ;; never opened.
                 (define-key map (kbd "n") #'etaf-weread--notebook)
                 (define-key map (kbd "q") #'etaf-weread-close)
                 (define-key map (kbd "<next>") #'etaf-weread--next-page)
                 (define-key map (kbd "<prior>") #'etaf-weread--previous-page)
+                ;; RET stays the renderer's activation for a focused control and
+                ;; falls back to the selection, so `j/k RET' opens the book the
+                ;; manual documents.
+                (define-key map (kbd "RET") #'etaf-weread--activate)
                 map)))
   "Reader bindings that must beat the renderer's own minor-mode map.
 `emulation-mode-map-alists' entries take precedence over every minor mode, so
@@ -243,9 +246,15 @@ COLUMNS describes the event window; LAYOUT and PANE describe the reader."
     (etaf-weread-move-selection model (- (or (plist-get state :page-size) 10)))))
 
 (defun etaf-weread--activate ()
-  "Open the selected book's detail or highlights."
+  "Open the Host at point, or the selected book's detail or highlights.
+A click or TAB leaves its Host under point and the renderer activates it;
+moving the selection with j/k leaves point where it was, and the reader then
+opens the book the selection points at."
   (interactive)
-  (etaf-weread-activate-selection (etaf-weread--current-model)))
+  (condition-case nil
+      (etaf-activate)
+    (user-error
+     (etaf-weread-activate-selection (etaf-weread--current-model)))))
 
 (defun etaf-weread--toggle-pane ()
   "Switch the side pane between the book detail and its highlights."

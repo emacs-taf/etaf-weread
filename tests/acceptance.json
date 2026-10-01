@@ -122,6 +122,11 @@
       "purpose": "Switching section or running a store search brings the list pane back on a compact frame, while a wide frame keeps the pane the reader was showing."
     },
     {
+      "name": "etaf-weread-tests-ret-opens-the-selection",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "RET activates a Host under point and otherwise opens the selected book, so selecting with j/k and pressing RET follows the documented contract."
+    },
+    {
       "name": "etaf-weread-tests-replaced-keys-run-the-reader-command",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Keys the renderer also binds (n, q, PageUp/PageDown) run the reader command instead of a renderer scroll, so the documented keyboard contract holds."

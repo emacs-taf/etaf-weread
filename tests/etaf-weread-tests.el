@@ -561,6 +561,25 @@ its pane choice."
         (kill-buffer " *etaf-weread-tests-other*"))
       (when (buffer-live-p headless) (kill-buffer headless)))))
 
+(ert-deftest etaf-weread-tests-ret-opens-the-selection ()
+  "Pressing RET after moving the selection opens the selected book.
+The renderer only activates a Host under point, and j/k leave point where it
+was, so the reader falls back to the selection the manual promises."
+  (setq etaf-weread-tests--requests nil)
+  (let ((etaf-weread-buffer-name " *etaf-weread-tests-ret*")
+        (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (let ((buffer (etaf-weread-open app)))
+          (with-current-buffer buffer
+            (execute-kbd-macro "j")
+            (should (= 1 (plist-get (etaf-weread-state app) :selection)))
+            (execute-kbd-macro (kbd "RET"))
+            (should (eq 'detail (plist-get (etaf-weread-state app) :pane)))
+            (should (equal "2" (plist-get (plist-get (etaf-weread-state app) :detail)
+                                           :id)))))
+      (when (get-buffer " *etaf-weread-tests-ret*")
+        (kill-buffer " *etaf-weread-tests-ret*")))))
+
 (ert-deftest etaf-weread-tests-replaced-keys-run-the-reader-command ()
   "The keys the renderer also binds run the reader command, not its scroll.
 `n', `q' and the page keys are scroll or window bindings in the renderer's
