@@ -127,6 +127,11 @@
       "purpose": "RET activates a Host under point and otherwise opens the selected book, so selecting with j/k and pressing RET follows the documented contract."
     },
     {
+      "name": "etaf-weread-tests-pane-keys-scroll-the-pane",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "SPC and M-v scroll a long table-of-contents pane from the keyboard, which the wheel alone cannot do."
+    },
+    {
       "name": "etaf-weread-tests-replaced-keys-run-the-reader-command",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Keys the renderer also binds (n, q, PageUp/PageDown) run the reader command instead of a renderer scroll, so the documented keyboard contract holds."

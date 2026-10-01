@@ -55,6 +55,10 @@
     (define-key map (kbd "<next>") #'etaf-weread--next-page)
     (define-key map (kbd "<prior>") #'etaf-weread--previous-page)
     (define-key map (kbd "RET") #'etaf-weread--activate)
+    (define-key map (kbd "C-v") #'etaf-weread--scroll-pane-down)
+    (define-key map (kbd "M-v") #'etaf-weread--scroll-pane-up)
+    (define-key map (kbd "SPC") #'etaf-weread--scroll-pane-down)
+    (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
     (define-key map (kbd "v") #'etaf-weread--toggle-pane)
     (define-key map (kbd "d") #'etaf-weread--detail-pane)
     (define-key map (kbd "P") #'etaf-weread--notes-pane)
@@ -98,6 +102,12 @@ side pane, and o opens the selected book in the browser.")
                 (define-key map (kbd "q") #'etaf-weread-close)
                 (define-key map (kbd "<next>") #'etaf-weread--next-page)
                 (define-key map (kbd "<prior>") #'etaf-weread--previous-page)
+                ;; The renderer binds these to its own canvas scroll, which a
+                ;; reader that owns its canvas never uses.
+                (define-key map (kbd "C-v") #'etaf-weread--scroll-pane-down)
+                (define-key map (kbd "M-v") #'etaf-weread--scroll-pane-up)
+                (define-key map (kbd "SPC") #'etaf-weread--scroll-pane-down)
+                (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
                 ;; RET stays the renderer's activation for a focused control and
                 ;; falls back to the selection, so `j/k RET' opens the book the
                 ;; manual documents.
@@ -256,6 +266,23 @@ opens the book the selection points at."
     (user-error
      (etaf-weread-activate-selection (etaf-weread--current-model)))))
 
+(defun etaf-weread--scroll-pane-down ()
+  "Scroll the side pane one page down.
+The wheel scrolls the pane under the pointer; these keys give the same
+ability to a keyboard, which otherwise cannot move a long table of contents
+or highlight list."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (state (etaf-weread-state model)))
+    (etaf-weread-scroll-pane model (max 1 (or (plist-get state :pane-rows) 10)))))
+
+(defun etaf-weread--scroll-pane-up ()
+  "Scroll the side pane one page up."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (state (etaf-weread-state model)))
+    (etaf-weread-scroll-pane model (- (max 1 (or (plist-get state :pane-rows) 10))))))
+
 (defun etaf-weread--toggle-pane ()
   "Switch the side pane between the book detail and its highlights."
   (interactive)
@@ -364,7 +391,8 @@ default face shows the reader background there instead of the frame's."
   (interactive)
   (message
    (concat "j/k 或滚轮选择 · 单击选中 · 双击/RET 打开 · v 详情/笔记 · o 浏览器阅读"
-           " · E 导出笔记 · s 书架 · 1/2/3 全部/在读/读完 · n 笔记本"
+           " · E 导出笔记 · C-v/M-v 或 SPC 滚动目录/划下面板 · s 书架"
+           " · 1/2/3 全部/在读/读完 · n 笔记本"
            " · i 笔记检索 · I 建立本地索引 · t 统计 · / 搜索 · g 刷新"
            " · T 深浅色 · q 关闭")))
 

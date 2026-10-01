@@ -8,6 +8,7 @@
 | wheel | select a book, or scroll the detail/highlight pane over it |
 | `RET`, double click | open the selected book (detail, or highlights in the notebook) |
 | `v` | switch the side pane between detail and highlights |
+| `C-v` / `M-v`, `SPC` / `S-SPC` | scroll the detail or highlight pane one page |
 | `d` / `P` | show the detail pane / the highlights of the selected book |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |

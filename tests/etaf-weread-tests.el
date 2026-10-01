@@ -61,6 +61,9 @@ The second book carries an orphan thought, so grouping is observable."
                                             :content "没有划线的想法"
                                             :createTime 102)))))))
 
+(defvar etaf-weread-tests--extra-chapters nil
+  "Extra chapters the scripted book reports, for tests that need a long pane.")
+
 (defun etaf-weread-tests--client (request callback)
   "Answer REQUEST on CALLBACK from the scripted account."
   (push request etaf-weread-tests--requests)
@@ -93,10 +96,12 @@ The second book carries an orphan thought, so grouping is observable."
                                                           :counts (list :notes 1 :reviews 1)
                                                           :intro "简介")
                                               :progress (list :progress 36 :readingTime 4384)
-                                              :chapters (list (list :chapterIdx 1 :title "第一章"
-                                                                    :wordCount 100)
-                                                              (list :chapterIdx 2 :title "第二章"
-                                                                    :wordCount 200)))))
+                                              :chapters (append
+                                                         (list (list :chapterIdx 1 :title "第一章"
+                                                                     :wordCount 100)
+                                                               (list :chapterIdx 2 :title "第二章"
+                                                                     :wordCount 200))
+                                                         etaf-weread-tests--extra-chapters))))
                      (:notes (etaf-weread-tests--notes
                               (plist-get request :id)
                               (format "详情节%s" (plist-get request :id))))
@@ -579,6 +584,32 @@ was, so the reader falls back to the selection the manual promises."
                                            :id)))))
       (when (get-buffer " *etaf-weread-tests-ret*")
         (kill-buffer " *etaf-weread-tests-ret*")))))
+
+(ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()
+  "SPC and M-v scroll a long detail pane from the keyboard.
+The wheel scrolls the pane under the pointer; without keys a keyboard-only
+reader cannot move a long table of contents at all."
+  (setq etaf-weread-tests--requests nil
+        etaf-weread-tests--extra-chapters
+        (cl-loop for index from 3 to 24
+                 collect (list :chapterIdx index
+                               :title (format "第%d章" index)
+                               :wordCount 100)))
+  (let ((etaf-weread-buffer-name " *etaf-weread-tests-scroll*")
+        (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (let ((buffer (etaf-weread-open app)))
+          (etaf-weread-show-book app "1" 'detail)
+          (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+          (with-current-buffer buffer
+            (should (= 0 (plist-get (etaf-weread-state app) :pane-scroll)))
+            (execute-kbd-macro (kbd "SPC"))
+            (should (> (plist-get (etaf-weread-state app) :pane-scroll) 0))
+            (execute-kbd-macro (kbd "M-v"))
+            (should (= 0 (plist-get (etaf-weread-state app) :pane-scroll)))))
+      (setq etaf-weread-tests--extra-chapters nil)
+      (when (get-buffer " *etaf-weread-tests-scroll*")
+        (kill-buffer " *etaf-weread-tests-scroll*")))))
 
 (ert-deftest etaf-weread-tests-replaced-keys-run-the-reader-command ()
   "The keys the renderer also binds run the reader command, not its scroll.

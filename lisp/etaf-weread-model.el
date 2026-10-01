@@ -59,12 +59,31 @@ model created by `etaf-weread-create'."
   :type 'integer
   :group 'etaf-weread)
 
-(defcustom etaf-weread-wide-columns 104
+(defconst etaf-weread--sidebar-columns 22
+  "Frame columns the section sidebar occupies.")
+
+(defconst etaf-weread--rail-columns 7
+  "Frame columns the glyph-only section rail of a medium layout occupies.")
+
+(defconst etaf-weread--pane-columns 46
+  "Frame columns the side pane occupies, including its border and padding.")
+
+(defconst etaf-weread--list-min-columns 70
+  "Frame columns the book list needs to render one full row.
+The full row spends 50 columns on everything but the title (index, author,
+meter, time, badge and the gaps), so a narrower list leaves the title too few
+columns to be recognizable and the row reads as broken.")
+
+(defcustom etaf-weread-wide-columns (+ etaf-weread--sidebar-columns
+                                      etaf-weread--pane-columns
+                                      etaf-weread--list-min-columns)
   "Frame width, in columns, that fits all three reader columns.
 At or above this width the reader shows the section sidebar, the book list and
 the detail pane at the same time (`wide' layout).  Between
 `etaf-weread-medium-columns' and this width it keeps a narrow glyph rail and
-shows one pane at a time; below it the sections move into a chip strip."
+shows one pane at a time; below it the sections move into a chip strip.
+Derived from the sidebar, the pane and the list's minimum, so the frame can
+never show three columns the book list cannot render in."
   :type 'integer
   :group 'etaf-weread)
 

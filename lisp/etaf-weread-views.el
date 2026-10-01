@@ -27,16 +27,16 @@
 ;;; Shared geometry
 ;;; ---------------------------------------------------------------------------
 
-(defconst etaf-weread--sidebar-width '(ch 22)
+(defconst etaf-weread--sidebar-width (list 'ch etaf-weread--sidebar-columns)
   "Width of the section sidebar.")
 
-(defconst etaf-weread--rail-width '(ch 7)
+(defconst etaf-weread--rail-width (list 'ch etaf-weread--rail-columns)
   "Width of the glyph-only section rail of a medium layout.")
 
-(defconst etaf-weread--pane-width '(ch 46)
+(defconst etaf-weread--pane-width (list 'ch etaf-weread--pane-columns)
   "Width of the book detail and highlight pane.")
 
-(defconst etaf-weread--pane-columns 36
+(defconst etaf-weread--pane-content-columns 36
   "Text columns available inside the pane content box.
 `etaf-weread--pane-width' minus its border and padding, so line clipping in
 the pane views stays inside the painted surface.")
@@ -465,7 +465,7 @@ actions the card offers."
             (text (expr (format "%d" (plist-get chapter :index)))))
           (box :height '(lh 1) :overflow 'hidden
             (text (expr (etaf-weread--clip (plist-get chapter :title)
-                                           etaf-weread--pane-columns))))
+                                           etaf-weread--pane-content-columns))))
           (box :height '(lh 1) :justify-self 'end :color (etaf-weread-color :dim)
 
             (text (expr (if (> (or (plist-get chapter :words) 0) 0)
@@ -528,7 +528,7 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
                :border-left (etaf-weread--view-border 'left (etaf-weread-color :quote))
                :color (etaf-weread-color :ink)
             (text (expr (etaf-weread--clip (plist-get line :text)
-                                           (- etaf-weread--pane-columns 2)))))
+                                           (- etaf-weread--pane-content-columns 2)))))
           (box :if (and (eq (plist-get line :kind) 'quote)
                         (not (string-empty-p (or (plist-get line :thought) ""))))
                :width 'stretch :height '(lh 1) :overflow 'hidden
@@ -536,14 +536,14 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
 
             (text (expr (format "✎ %s"
                                 (etaf-weread--clip (plist-get line :thought)
-                                                   (- etaf-weread--pane-columns 4))))))
+                                                   (- etaf-weread--pane-content-columns 4))))))
           (box :if (eq (plist-get line :kind) 'thought)
                :width 'stretch :height '(lh 1) :overflow 'hidden
                :padding '((lh 0) (ch 1)) :color (etaf-weread-color :quote)
 
             (text (expr (format "✦ %s"
                                 (etaf-weread--clip (plist-get line :text)
-                                                   (- etaf-weread--pane-columns 2)))))))
+                                                   (- etaf-weread--pane-content-columns 2)))))))
       (box :if (null (plist-get notes :groups)) :height '(lh 4)
            :text-align 'center :color (etaf-weread-color :dim)
         (text "这本书还没有划线或想法"))))))
