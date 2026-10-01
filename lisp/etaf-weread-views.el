@@ -106,7 +106,9 @@ so a selected entry reads as one highlighted line."
           :font-weight (if active 'bold 'normal)
           :border-left (and active
                             (etaf-weread--view-border 'left (etaf-weread-color :accent)))
-      (box :width '(ch 3) :height '(lh 1) :text-align 'center
+      ;; Symbol glyphs have no bold variant on this font chain: bold would
+      ;; fall back to a taller font and make the row exceed the grid.
+      (box :width '(ch 3) :height '(lh 1) :text-align 'center :font-weight 'normal
            :color (if active (etaf-weread-color :accent) (etaf-weread-color :muted))
         (text (expr (or glyph ""))))
       (box :if (not compact) :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
@@ -249,7 +251,7 @@ sections instead of repeating the name."
         :border-right (etaf-weread--view-border 'right (etaf-weread-color :line))
     (flex :width 'stretch :height '(lh 2) :gap '((lh 0) (ch 1))
           :align-items 'center :padding '((lh 0) (ch 1))
-      (text :font-weight 'bold :color (etaf-weread-color :accent) "▤")
+      (text :font-weight 'bold :color (etaf-weread-color :accent) "读")
       (column :if (not compact) :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
               :item-gap '(lh 0)
         (box :height '(lh 1) :overflow 'hidden :font-weight 'bold
@@ -306,7 +308,7 @@ needs.  MODE `stats' hides the search field, which has no meaning there."
       (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :muted)
 
         (text (expr (or subtitle ""))))
-      (etaf-button :label (if loading "…" "↻") :variant 'ghost
+      (etaf-button :label (if loading "…" "刷新") :variant 'ghost
                    :on-press on-refresh))
     (flex :if (and compact (not (eq mode 'stats))) :width 'stretch :height '(lh 2)
           :gap '((lh 0) (ch 1)) :align-items 'center
@@ -325,7 +327,7 @@ needs.  MODE `stats' hides the search field, which has no meaning there."
         (etaf-text-input :value query :label "搜索"
                          :placeholder (or placeholder "搜索书名或作者")
                          :hide-label t :on-change on-search))
-      (etaf-button :label (if loading "… 加载中" "↻ 刷新") :variant 'ghost
+      (etaf-button :label (if loading "… 加载中" "刷新") :variant 'ghost
                    :on-press on-refresh))))
 
 (etaf-define-component etaf-weread--view-tabs (&key pane on-pane layout)
@@ -392,10 +394,10 @@ actions the card offers."
         (box :width '(ch 8) :height '(lh 4) :text-align 'center
              :bgcolor (etaf-weread-color :cover)
              :color (etaf-weread-color :accent)
-             ;; The glyph may be larger than one line because this box is four
-             ;; lines tall: the row keeps its height, so the page budget (which
-             ;; counts lines) still holds.
-             :font-size 28 :font-weight 'bold
+             ;; No font-size override: a glyph taller than the line height would
+             ;; make the row taller than the grid, and the page budget counts
+             ;; rows, so the canvas would overflow the window.
+             :font-weight 'bold
           (text (expr (if (and (plist-get detail :title)
                                (not (string-empty-p (plist-get detail :title))))
                           (substring (plist-get detail :title) 0 1)

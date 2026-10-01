@@ -28,15 +28,15 @@
 
 (defconst etaf-weread-sections
   '((书架
-     (:shelf "全部书架" "▤")
-     (:reading "在读" "◐")
-     (:finished "读完" "✔"))
+     (:shelf "全部书架" "书")
+     (:reading "在读" "读")
+     (:finished "读完" "完"))
     (笔记
-     (:notebook "笔记本" "✎")
-     (:index "笔记检索" "◇"))
+     (:notebook "笔记本" "记")
+     (:index "笔记检索" "查"))
     (发现
-     (:search "搜索书城" "◎")
-     (:stats "阅读统计" "▲")))
+     (:search "搜索书城" "搜")
+     (:stats "阅读统计" "计")))
   "Sidebar groups shown by the reader.
 Each group is (GROUP-NAME (SECTION LABEL GLYPH) ...); SECTION keys are accepted
 by `etaf-weread-locate'.")
