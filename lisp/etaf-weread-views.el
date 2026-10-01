@@ -592,9 +592,10 @@ Its column width sizes the hint box, so the summary is never clipped.")
 (etaf-define-component etaf-weread--view-footer
     (&key account summary message error compact)
   "Render the status bar with ACCOUNT, SUMMARY and the latest MESSAGE.
-A failure is painted in the danger color, a hint in the muted one.  The hint
-box takes exactly the columns its text needs, so a wide frame shows the whole
-binding summary."
+A failure is painted in the danger color, a hint in the muted one, and the
+account name carries its own state in its color instead of a marker glyph.
+The hint box takes exactly the columns its text needs and never shrinks, so a
+long message shortens itself instead of clipping the binding summary."
   :view
   (flex :width 'stretch :height (if compact '(lh 2) '(lh 1))
         :flex-direction (if compact 'column 'row)
@@ -603,19 +604,19 @@ binding summary."
         :flex-shrink 0
         :bgcolor (etaf-weread-color :panel)
         :border-top (etaf-weread--view-border 'top (etaf-weread-color :line))
-    (flex :width '(ch 24) :height '(lh 1) :gap '((lh 0) (ch 1))
+    (flex :width '(ch 24) :height '(lh 1)
           :align-items 'center :overflow 'hidden
-      (text :color (etaf-weread-color (if account :ok :danger)) "●")
-      (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :muted)
+      (box :height '(lh 1) :overflow 'hidden
+           :color (etaf-weread-color (if account :muted :danger))
 
         (text (expr (or (and account (plist-get account :name)) "未登录")))))
-    (box :if (not compact) :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
+    (box :if (not compact) :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0)
          :height '(lh 1) :overflow 'hidden
          :color (etaf-weread-color (if error :danger :dim))
       (text (expr (or message summary ""))))
     (box :if (not compact)
          :width (list 'ch (string-width etaf-weread--footer-hint))
-         :height '(lh 1) :text-align 'right :overflow 'hidden
+         :flex-shrink 0 :height '(lh 1) :text-align 'right :overflow 'hidden
          :color (etaf-weread-color :dim)
       (text (expr etaf-weread--footer-hint)))
     (box :if compact :width 'stretch :height '(lh 1) :overflow 'hidden
