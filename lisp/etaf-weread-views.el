@@ -234,9 +234,11 @@ does not jump while a load is pending."
       (text "正在加载…"))))
 
 (etaf-define-component etaf-weread--view-sidebar
-    (&key groups section account compact on-locate)
+    (&key groups section compact on-locate)
   "Render the section sidebar from GROUPS with SECTION highlighted.
-COMPACT renders the glyph-only rail a medium layout has room for."
+COMPACT renders the glyph-only rail a medium layout has room for.  The
+signed-in account belongs to the status bar, so the rail ends with its
+sections instead of repeating the name."
   :view
   (flex :flex-direction 'column
         :width (if compact etaf-weread--rail-width etaf-weread--sidebar-width)
@@ -268,15 +270,7 @@ COMPACT renders the glyph-only rail a medium layout has room for."
         :label (nth 1 entry)
         :compact compact
         :active (eq (car entry) section)
-        :on-press (lambda () (funcall on-locate (car entry)))))
-    (box :flex-grow 1 :flex-basis 'auto :min-height '(lh 0))
-    (flex :width 'stretch :gap '((lh 0) (ch 1)) :align-items 'center
-          :padding '((lh 1) (ch 1))
-          :border-top (etaf-weread--view-border 'top (etaf-weread-color :line))
-      (text :color (etaf-weread-color (if account :ok :danger)) "●")
-      (box :if (not compact) :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
-           :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :muted)
-        (text (expr (or (and account (plist-get account :name)) "未登录")))))))
+        :on-press (lambda () (funcall on-locate (car entry)))))))
 
 (etaf-define-component etaf-weread--view-chips (&key groups section on-locate)
   "Render the sections as a strip of glyph chips, as a narrow layout does.
@@ -398,13 +392,13 @@ actions the card offers."
         (box :width '(ch 8) :height '(lh 4) :text-align 'center
              :bgcolor (etaf-weread-color :cover)
              :color (etaf-weread-color :accent)
-             :font-size 28 :font-weight 'bold
+             :font-weight 'bold
           (text (expr (if (and (plist-get detail :title)
                                (not (string-empty-p (plist-get detail :title))))
                           (substring (plist-get detail :title) 0 1)
                         "书"))))
         (column :flex-grow 1 :flex-basis 'auto :min-width '(ch 0) :item-gap '(lh 0)
-          (box :height '(lh 1) :overflow 'hidden :font-weight 'bold :font-size 16
+          (box :height '(lh 1) :overflow 'hidden :font-weight 'bold
             (text (expr (or (plist-get detail :title) ""))))
           (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :muted)
             (text (expr (or (plist-get detail :author) "佚名"))))
@@ -557,7 +551,7 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
     (etaf-weread--view-note
      :if (null stats) :loading t :height '(lh 8))
     (flex :if stats :flex-direction 'column :width 'stretch :gap '((lh 0) (ch 0))
-      (text :font-weight 'bold :font-size 16 "阅读统计")
+      (text :font-weight 'bold "阅读统计")
       (box :height '(lh 1) :color (etaf-weread-color :muted)
         (text (expr (or (plist-get stats :conclusion) ""))))
       (box :height '(lh 1))

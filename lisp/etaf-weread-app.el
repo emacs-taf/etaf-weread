@@ -408,14 +408,12 @@ the session's timers and pending backend requests."
        :if (eq (etaf-weread--read session :layout) 'wide)
        :groups etaf-weread-sections
        :section (etaf-weread--read session :section)
-       :account (etaf-weread--read session :account)
        :on-locate on-locate)
       (etaf-weread--view-sidebar
        :if (eq (etaf-weread--read session :layout) 'medium)
        :compact t
        :groups etaf-weread-sections
        :section (etaf-weread--read session :section)
-       :account (etaf-weread--read session :account)
        :on-locate on-locate)
       (flex :if (etaf-weread--list-shown-p session)
             :flex-direction 'column :width 'stretch :flex-grow 1

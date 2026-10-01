@@ -17,6 +17,13 @@ A window change adapts the layout through the model, and ETAF refits the canvas
 of every mounted runtime once a resize settles; the reader holds no direct Ebox
 or ECSS reference.
 
+Every row of the canvas must stay exactly one line height.  The model budgets
+the page from the window's height in lines (`etaf-weread--page-size-for`), so a
+row carrying a larger `:font-size` makes the canvas taller in pixels than the
+rows it was budgeted for, and the window silently clips its bottom rows.  Use
+weight and colour for emphasis instead, or reserve whole `lh` rows for a larger
+element.
+
 ## Data flow
 
 ```text
