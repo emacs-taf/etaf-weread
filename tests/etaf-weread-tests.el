@@ -619,7 +619,11 @@ it into the same chapter shape a book reply uses."
                  (chapters (plist-get content :chapters)))
             (should (= 2 (length chapters)))
             (should (string-match-p "第一章正文" (plist-get (car chapters) :text)))
-            (should (string-match-p "第二章正文" (plist-get (car (last chapters)) :text))))
+            (should (string-match-p "第二章正文" (plist-get (car (last chapters)) :text)))
+            ;; The XML declaration every XHTML entry carries is markup, not
+            ;; chapter text: the heading line must not surface in the title.
+            (should (equal "第一章" (plist-get (car chapters) :title)))
+            (should (equal "第二章" (plist-get (car (last chapters)) :title))))
           (should-error (etaf-weread-library-content
                          (expand-file-name "notes.pdf" directory))
                         :type 'etaf-weread-error)
@@ -646,6 +650,13 @@ wrapped text."
           (let ((buffer (etaf-weread-open app)))
             (should (= 3 (etaf-weread-open-local-book
                           app (expand-file-name "local-a.txt" directory))))
+            ;; A compact frame shows one pane at a time, and the reading pane
+            ;; is the one a local chapter needs; it must paint its lines.
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (should (string-match-p
+                       "第一章正文"
+                       (buffer-substring-no-properties (point-min) (point-max)))))
             (let ((state (etaf-weread-state app)))
               (should (eq 'reader (plist-get state :pane)))
               (should (= 0 (plist-get (plist-get state :local) :index)))
@@ -657,6 +668,11 @@ wrapped text."
               (should (string-match-p "第 1/3 章" (plist-get state :reader-title))))
             ;; A real key turns the chapter while the reading pane is shown.
             (with-current-buffer buffer (execute-kbd-macro (kbd "<next>")))
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (should (string-match-p
+                       "第二章正文"
+                       (buffer-substring-no-properties (point-min) (point-max)))))
             (let ((state (etaf-weread-state app)))
               (should (= 1 (plist-get (plist-get state :local) :index)))
               (should (string-match-p "第二章正文"

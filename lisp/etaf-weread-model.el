@@ -1369,9 +1369,9 @@ the detail pane; a compact layout shows exactly the recorded pane."
       (eq (etaf-weread--read app :pane) 'list)))
 
 (defun etaf-weread--pane-shown-p (app)
-  "Return non-nil when APP's detail or highlight pane fits in the frame."
+  "Return non-nil when APP's reading, detail or highlight pane fits in the frame."
   (or (not (etaf-weread--compact-layout-p app))
-      (memq (etaf-weread--read app :pane) '(detail notes))))
+      (memq (etaf-weread--read app :pane) '(reader detail notes))))
 
 (defun etaf-weread--sync-pane-total (app)
   "Recompute the scrollable rows of APP's side pane."
