@@ -517,8 +517,11 @@ A local book needs no backend, so the rows appear synchronously."
              (format "本地书库：%s（%d 本）" directory (length rows))
            (format "本地书库目录不存在：%s" directory)))))
 
-(defconst etaf-weread--paragraph-indent "　　"
-  "Full-width indent a Chinese book starts a paragraph with.")
+(defconst etaf-weread--paragraph-indent "    "
+  "Indent a Chinese book starts a paragraph with, in columns.
+Plain spaces: the ideographic space (U+3000) renders as an underlined escape
+glyph whenever the reader's font has no glyph for it, which looks like a
+stray rule above the first line of every paragraph.")
 
 (defun etaf-weread--wrap-text (text columns &optional indent)
   "Return TEXT as lines no wider than COLUMNS display columns.

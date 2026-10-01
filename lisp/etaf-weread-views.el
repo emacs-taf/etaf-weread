@@ -370,11 +370,16 @@ SPREAD columns (1 or 2) are shown side by side, so this Component never
 measures text and no line is clipped.  The columns stay centered, which is
 what keeps a wide frame readable, and ZEN drops everything but the text."
   :view
-  (flex :width 'stretch :height 'stretch :justify-content 'center
-        :align-items 'stretch
+  ;; The pane's cross-axis stretch gives this row the pane's width; setting a
+  ;; `stretch' width here would resolve to the whole viewport instead.
+  (flex :height 'stretch :align-items 'stretch
+    ;; The two spacers take equal shares of whatever the pane has left, so the
+    ;; columns sit centered no matter how the widths are measured.
+    (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0) :min-height '(lh 0))
     (column :width (list 'ch (+ (* (max 1 (or columns 44)) (max 1 (or spread 1)))
                                     (* (1- (max 1 (or spread 1)))
                                        etaf-weread--reader-gutter)))
+            :flex-shrink 0
             :item-gap '(lh 0)
             :padding '((lh 1) (ch 0))
       (flex :if (not zen) :width 'stretch :height '(lh 1)
@@ -389,7 +394,7 @@ what keeps a wide frame readable, and ZEN drops everything but the text."
        :if (null lines)
        :text "选择一本本地书并回车开始阅读"
        :height '(lh 6))
-      (flex :if lines :width 'stretch :height 'stretch
+      (flex :if lines :height 'stretch
             :gap (list '(lh 0) (list 'ch etaf-weread--reader-gutter))
             :align-items 'stretch
         (column :for (slice (etaf-weread--reader-column-slices
@@ -401,7 +406,8 @@ what keeps a wide frame readable, and ZEN drops everything but the text."
           ;; lines, so the text itself cannot key the list.
           (box :for (line (cdr slice)) :key (plist-get line :key)
                :height '(lh 1) :overflow 'hidden
-            (text (expr (or (plist-get line :text) "")))))))))
+            (text (expr (or (plist-get line :text) "")))))))
+      (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0) :min-height '(lh 0))))
 
 (etaf-define-component etaf-weread--view-note (&key text loading height)
   "Render TEXT as a quiet placeholder, or a skeleton while LOADING.

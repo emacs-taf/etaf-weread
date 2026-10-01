@@ -611,16 +611,19 @@ the session's timers and pending backend requests."
          :on-press on-press-row))
       (flex :if (etaf-weread--pane-shown-p session)
             :flex-direction 'column
-            ;; The reading pane owns the body while a local chapter is open;
-            ;; the card and highlight panes keep their fixed column.
-            :width (if (eq (etaf-weread--effective-pane session) 'reader)
-                       'stretch
+            ;; The reading pane takes the space the row has left, so it is sized
+            ;; by flex (zero basis plus grow); a `stretch' width would resolve
+            ;; to the whole viewport and push the body past the frame.  The card
+            ;; and highlight panes keep their fixed column.
+            :width (unless (eq (etaf-weread--effective-pane session) 'reader)
                      etaf-weread--pane-width)
             :flex-grow (if (or (eq (etaf-weread--effective-pane session) 'reader)
                                (etaf-weread--compact-layout-p session))
                            1 0)
-            :flex-shrink 0
-            :flex-basis 'auto
+            :flex-shrink (if (eq (etaf-weread--effective-pane session) 'reader) 1 0)
+            :flex-basis (if (eq (etaf-weread--effective-pane session) 'reader)
+                            '(ch 0)
+                          'auto)
             :min-width '(ch 0) :min-height '(lh 0)
             :background-color (etaf-weread-color :panel)
             :border-left (etaf-weread--view-border 'left (etaf-weread-color :line))

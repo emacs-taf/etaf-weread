@@ -866,8 +866,8 @@ because it carries the chapter heading."
               (should (> (length lines) (1+ rows)))
               ;; Paragraph indent: the heading stays flush, a later paragraph
               ;; starts with the full-width indent.
-              (should-not (string-prefix-p "　　" (plist-get (car lines) :text)))
-              (should (seq-some (lambda (line) (string-prefix-p "　　" (plist-get line :text)))
+              (should-not (string-prefix-p "    " (plist-get (car lines) :text)))
+              (should (seq-some (lambda (line) (string-prefix-p "    " (plist-get line :text)))
                                 lines))
               (etaf-mount buffer (etaf-weread-view app)
                           (list :viewport-width 1200 :viewport-height 40))
