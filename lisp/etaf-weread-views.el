@@ -348,30 +348,60 @@ the full binding summary cannot share a phone-like line with the switch."
                        "? 帮助"
                      "j/k 选择 · RET 打开 · v 切换面板"))))))
 
+(defun etaf-weread--reader-column-slices (lines rows spread)
+  "Return LINES divided into SPREAD columns of ROWS lines each.
+Each slice is a cons of its first line's key and that column's lines; the key
+keeps the keyed column stable while a chapter is read.  A column past the end
+of LINES is dropped, so a short chapter still fills the first column."
+  (cl-loop for column from 0 below (max 1 spread)
+           for start = (* column (max 1 rows))
+           for end = (min (length lines) (+ start (max 1 rows)))
+           when (< start end)
+           collect (cons (plist-get (nth start lines) :key)
+                         (seq-subseq lines start end))))
+
 (etaf-define-component etaf-weread--view-reader
-    (&key title lines)
+    (&key title lines zen columns spread rows progress)
   "Render one local chapter in the reading pane.
-TITLE is the running head (book, chapter number and chapter title); LINES is
-the visible slice of the chapter text, already wrapped to the pane width, so
-this Component never measures text and no line is clipped."
+TITLE is the running head (book, chapter number and chapter title) and
+PROGRESS is how far the book is read, in percent.  LINES is the visible part
+of the chapter text, wrapped to COLUMNS columns; ROWS lines fit one column and
+SPREAD columns (1 or 2) are shown side by side, so this Component never
+measures text and no line is clipped.  The columns stay centered, which is
+what keeps a wide frame readable, and ZEN drops everything but the text."
   :view
-  (column :width 'stretch :height 'stretch :item-gap '(lh 0)
-          :padding '((lh 1) (ch 2))
-    (box :height '(lh 1) :overflow 'hidden :font-weight 'bold
-      (text (expr (or title ""))))
-    (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :dim)
-      (text "C-v/M-v · SPC 翻页 · <next> 翻章 · v 卡片"))
-    (box :height '(lh 1))
-    (etaf-weread--view-note
-     :if (null lines)
-     :text "选择一本本地书并回车开始阅读"
-     :height '(lh 6))
-    (column :if lines :width 'stretch :item-gap '(lh 0)
-      ;; The key is the line index: body text repeats empty and blank lines,
-      ;; so the text itself cannot key the list.
-      (box :for (line lines) :key (plist-get line :key)
-           :height '(lh 1) :overflow 'hidden
-        (text (expr (or (plist-get line :text) "")))))))
+  (flex :width 'stretch :height 'stretch :justify-content 'center
+        :align-items 'stretch
+    (column :width (list 'ch (+ (* (max 1 (or columns 44)) (max 1 (or spread 1)))
+                                    (* (1- (max 1 (or spread 1)))
+                                       etaf-weread--reader-gutter)))
+            :item-gap '(lh 0)
+            :padding '((lh 1) (ch 0))
+      (flex :if (not zen) :width 'stretch :height '(lh 1)
+            :gap '((lh 0) (ch 1)) :align-items 'center
+        (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
+             :height '(lh 1) :overflow 'hidden :font-weight 'bold
+          (text (expr (or title ""))))
+        (box :height '(lh 1) :color (etaf-weread-color :dim)
+          (text (expr (format "%d%%" (or progress 0))))))
+      (box :if (not zen) :height '(lh 1))
+      (etaf-weread--view-note
+       :if (null lines)
+       :text "选择一本本地书并回车开始阅读"
+       :height '(lh 6))
+      (flex :if lines :width 'stretch :height 'stretch
+            :gap (list '(lh 0) (list 'ch etaf-weread--reader-gutter))
+            :align-items 'stretch
+        (column :for (slice (etaf-weread--reader-column-slices
+                             lines (or rows 10) (or spread 1)))
+                :key (car slice)
+                :width (list 'ch (max 16 (or columns 44)))
+                :item-gap '(lh 0)
+          ;; The key is the line index: body text repeats empty and blank
+          ;; lines, so the text itself cannot key the list.
+          (box :for (line (cdr slice)) :key (plist-get line :key)
+               :height '(lh 1) :overflow 'hidden
+            (text (expr (or (plist-get line :text) "")))))))))
 
 (etaf-define-component etaf-weread--view-note (&key text loading height)
   "Render TEXT as a quiet placeholder, or a skeleton while LOADING.
@@ -612,12 +642,14 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
 Its column width sizes the hint box, so the summary is never clipped.")
 
 (etaf-define-component etaf-weread--view-footer
-    (&key account summary message error compact)
+    (&key account summary message error compact hint)
   "Render the status bar with ACCOUNT, SUMMARY and the latest MESSAGE.
-A failure is painted in the danger color, a hint in the muted one, and the
-account name carries its own state in its color instead of a marker glyph.
-The hint box takes exactly the columns its text needs and never shrinks, so a
-long message shortens itself instead of clipping the binding summary."
+HINT is the binding summary at the right edge; it defaults to
+`etaf-weread--footer-hint', and the reading pane passes its own.  A failure is
+painted in the danger color, a hint in the muted one, and the account name
+carries its own state in its color instead of a marker glyph.  The hint box
+takes exactly the columns its text needs and never shrinks, so a long message
+shortens itself instead of clipping the binding summary."
   :view
   (flex :width 'stretch :height (if compact '(lh 2) '(lh 1))
         :flex-direction (if compact 'column 'row)
@@ -637,10 +669,10 @@ long message shortens itself instead of clipping the binding summary."
          :color (etaf-weread-color (if error :danger :dim))
       (text (expr (or message summary ""))))
     (box :if (not compact)
-         :width (list 'ch (string-width etaf-weread--footer-hint))
+         :width (list 'ch (string-width (or hint etaf-weread--footer-hint)))
          :flex-shrink 0 :height '(lh 1) :text-align 'right :overflow 'hidden
          :color (etaf-weread-color :dim)
-      (text (expr etaf-weread--footer-hint)))
+      (text (expr (or hint etaf-weread--footer-hint))))
     (box :if compact :width 'stretch :height '(lh 1) :overflow 'hidden
          :color (etaf-weread-color (if error :danger :dim))
       (text (expr (or message summary ""))))))

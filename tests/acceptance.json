@@ -137,6 +137,31 @@
       "purpose": "The local section lists books from a directory, opening one publishes its chapter text in the reading pane, and the chapter keys move through the book within the pane's scroll budget."
     },
     {
+      "name": "etaf-weread-tests-reading-pane-owns-the-frame-body",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "An open local chapter hides the book list and takes the frame body in a wide layout, and leaving the chapter for the card brings the list back."
+    },
+    {
+      "name": "etaf-weread-tests-reading-width-and-zen",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Adjusting the reading width wraps the open chapter again within the new column, and the reading-only layout hides the navigation while keeping the chapter."
+    },
+    {
+      "name": "etaf-weread-tests-reading-spread-and-indent",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A reading pane wide enough for two columns paints both slices of the chapter, Chinese paragraphs start indented while the heading stays flush, and the single-column choice is one call away."
+    },
+    {
+      "name": "etaf-weread-tests-reader-preferences-persist",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "The reading width and the chosen appearance are stored in the settings file and a new session starts with them."
+    },
+    {
+      "name": "etaf-weread-tests-local-rows-do-not-ask-the-shelf",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Selecting a local row never requests it from the backend while a store row still follows the selection."
+    },
+    {
       "name": "etaf-weread-tests-pane-keys-scroll-the-pane",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "SPC and M-v scroll a long table-of-contents pane from the keyboard, which the wheel alone cannot do."

@@ -118,9 +118,18 @@ The second book carries an orphan thought, so grouping is observable."
                                                :finished nil :reading nil)))
                      (:export (list :ok t :conclusion "已导出笔记"))))))) 
 
+(defvar etaf-weread-tests--settings nil
+  "Settings file the next test session binds, for tests that share one file.")
+
 (defun etaf-weread-tests--session (&optional client)
-  "Return a reader session driven by the scripted CLIENT."
-  (etaf-weread-create :client (or client #'etaf-weread-tests--client)))
+  "Return a reader session driven by the scripted CLIENT.
+The session's preferences live in a disposable file, so a test never reads or
+writes the settings file of a real reader.  A test that needs two sessions to
+share one file binds `etaf-weread-tests--settings' first."
+  (let ((etaf-weread-settings-file
+         (or etaf-weread-tests--settings
+             (make-temp-file "weread-tests-settings-" nil ".eld"))))
+    (etaf-weread-create :client (or client #'etaf-weread-tests--client))))
 
 (defun etaf-weread-tests--request (op)
   "Return the newest recorded request whose `:op' is OP."
@@ -687,6 +696,195 @@ wrapped text."
             (should (= 3 (etaf-weread-read-chapter app 99)))
             (kill-buffer buffer)))
       (delete-directory directory t))))
+
+(defmacro etaf-weread-tests--with-local-books (directory-var &rest body)
+  "Run BODY with a disposable local library DIRECTORY-VAR points at.
+The library holds the fixture books and `etaf-weread-library-directory' points
+at it while BODY runs, so the section scan reads only fixtures."
+  (declare (indent 1) (debug t))
+  `(let* ((fixtures (expand-file-name "fixtures" etaf-weread-tests--directory))
+          (,directory-var (make-temp-file "weread-local-books-" t))
+          (etaf-weread-library-directory ,directory-var))
+     (unwind-protect
+         (progn
+           (dolist (name '("local-a.txt" "local-mini.epub"))
+             (copy-file (expand-file-name name fixtures)
+                        (expand-file-name name ,directory-var) t))
+           ,@body)
+       (delete-directory ,directory-var t))))
+
+(ert-deftest etaf-weread-tests-reading-pane-owns-the-frame-body ()
+  "An open local chapter replaces the book list in a wide frame.
+The reading pane is what the session is for, so it takes the frame's body and
+the list steps aside; leaving the chapter for the book card brings the list
+back.  The session is headless, so its layout is the wide one the list would
+otherwise share the body with."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let ((app (etaf-weread-tests--session))
+          (buffer (get-buffer-create " *etaf-weread-tests-owns*")))
+      (unwind-protect
+          (progn
+            (etaf-weread-locate app :local)
+            (etaf-mount buffer (etaf-weread-view app)
+                        (list :viewport-width 1200 :viewport-height 40))
+            (with-current-buffer buffer
+              (should (string-match-p
+                       "搜索书名或作者"
+                       (buffer-substring-no-properties (point-min) (point-max)))))
+            (should (= 3 (etaf-weread-open-local-book
+                          app (expand-file-name "local-a.txt" directory))))
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+                (should (string-match-p "第一章正文" text))
+                ;; The search field is painted by the list alone.
+                (should-not (string-match-p "搜索书名或作者" text))))
+            ;; Leaving the chapter for the book card shows the list again.
+            (etaf-weread-toggle-pane app)
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (should (string-match-p
+                       "搜索书名或作者"
+                       (buffer-substring-no-properties (point-min) (point-max))))))
+        (kill-buffer buffer)))))
+
+(ert-deftest etaf-weread-tests-reading-width-and-zen ()
+  "`[' and `]' refit the reading column and `f' gives the frame to the chapter.
+The column is wrapped again on every width change, so no line clips, and the
+reading-only layout drops the navigation and the footer."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let ((app (etaf-weread-tests--session))
+          (buffer (get-buffer-create " *etaf-weread-tests-zen*")))
+      (unwind-protect
+          (progn
+            (etaf-weread-locate app :local)
+            (etaf-weread-open-local-book app (expand-file-name "local-a.txt" directory))
+            (etaf-mount buffer (etaf-weread-view app)
+                        (list :viewport-width 1200 :viewport-height 40))
+            (should (= 44 (plist-get (etaf-weread-state app) :reader-columns)))
+            (let ((before (length (plist-get (etaf-weread-state app) :reader-lines))))
+              (should (= 32 (etaf-weread-adjust-reading-measure app -12)))
+              (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+              (let* ((state (etaf-weread-state app))
+                     (lines (plist-get state :reader-lines))
+                     (widths (mapcar (lambda (line)
+                                       (string-width (plist-get line :text)))
+                                     lines)))
+                (should (= 32 (plist-get state :reader-columns)))
+                (should (> (length lines) before))
+                (should (<= (apply #'max widths) 32))))
+            (should (eq t (etaf-weread-toggle-zen app)))
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+                (should (string-match-p "第一章正文" text))
+                ;; The section navigation owns that name and zen hides it.
+                (should-not (string-match-p "全部书架" text))))
+            (should-not (etaf-weread-toggle-zen app))
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (should (string-match-p
+                       "全部书架"
+                       (buffer-substring-no-properties (point-min) (point-max))))))
+        (kill-buffer buffer)))))
+
+(ert-deftest etaf-weread-tests-reader-preferences-persist ()
+  "The appearance and the reading width are kept for the next session.
+A reader that forgets the chosen width and palette on every restart is not a
+reader, so both are stored in `etaf-weread-settings-file'."
+  (let* ((file (make-temp-file "weread-settings-" nil ".eld"))
+         (original etaf-weread-theme-mode)
+         (etaf-weread-tests--settings file)
+         (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (progn
+          (setq etaf-weread-theme-mode 'dark)
+          (should (= 44 (plist-get (etaf-weread-state app) :reader-measure)))
+          (should (= 50 (etaf-weread-adjust-reading-measure app 6)))
+          (should (eq 'light (etaf-weread-cycle-theme app)))
+          (should (eq 'sepia (etaf-weread-cycle-theme app)))
+          (should (eq 'dark (etaf-weread-cycle-theme app)))
+          (should (eq 'light (etaf-weread-cycle-theme app)))
+          ;; A fresh session on the same file starts where the last one left.
+          (let ((again (etaf-weread-tests--session)))
+            (should (= 50 (plist-get (etaf-weread-state again) :reader-measure)))
+            (should (eq 'light etaf-weread-theme-mode))))
+      (setq etaf-weread-theme-mode original
+            etaf-weread-tests--settings nil)
+      (ignore-errors (delete-file file)))))
+
+(ert-deftest etaf-weread-tests-local-rows-do-not-ask-the-shelf ()
+  "Selecting a local row never requests it from the backend.
+A local book's id is its file path and the shelf holds no such book, so
+following the selection as if it were a store book would paint a not-found
+error over the reader."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let ((etaf-weread-detail-follow-delay 0)
+          (app (etaf-weread-tests--session)))
+      ;; Sessions from earlier tests may still have a detail follow pending;
+      ;; let those fire before recording, so only this session's requests
+      ;; are read below.
+      (sleep-for 0.5)
+      (setq etaf-weread-tests--requests nil)
+      (etaf-weread-locate app :local)
+      (should (= 2 (length (plist-get (etaf-weread-state app) :items))))
+      (setq etaf-weread-tests--requests nil)
+      (etaf-weread-move-selection app 1)
+      (sleep-for 0.1)
+      (should-not (etaf-weread-tests--request :book))
+      (should-not (plist-get (etaf-weread-state app) :error))
+      ;; A store row is still followed: the guard is about local rows, not
+      ;; about the detail follow itself.
+      (etaf-weread-locate app :shelf)
+      (setq etaf-weread-tests--requests nil)
+      (etaf-weread-move-selection app 1)
+      (sleep-for 0.1)
+      (should (etaf-weread-tests--request :book)))))
+
+(ert-deftest etaf-weread-tests-reading-spread-and-indent ()
+  "A wide reading pane shows two columns and indents Chinese paragraphs.
+The second column carries the lines the first cannot hold, a paragraph after
+a blank line starts with the full-width indent, and the first line stays flush
+because it carries the chapter heading."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let ((app (etaf-weread-tests--session))
+          (buffer (get-buffer-create " *etaf-weread-tests-spread*")))
+      (unwind-protect
+          (progn
+            (etaf-weread-locate app :local)
+            (etaf-weread-open-local-book app (expand-file-name "local-a.txt" directory))
+            ;; A narrower measure lets two columns share a batch frame.
+            (should (= 24 (etaf-weread-adjust-reading-measure app -20)))
+            (should (= 2 (plist-get (etaf-weread-state app) :reader-shown)))
+            (let* ((state (etaf-weread-state app))
+                   (rows (plist-get state :pane-rows))
+                   (lines (plist-get state :reader-lines)))
+              (should (> (length lines) (1+ rows)))
+              ;; Paragraph indent: the heading stays flush, a later paragraph
+              ;; starts with the full-width indent.
+              (should-not (string-prefix-p "　　" (plist-get (car lines) :text)))
+              (should (seq-some (lambda (line) (string-prefix-p "　　" (plist-get line :text)))
+                                lines))
+              (etaf-mount buffer (etaf-weread-view app)
+                          (list :viewport-width 1200 :viewport-height 40))
+              (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+              (with-current-buffer buffer
+                (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+                  ;; The line that opens the second column is painted too, so
+                  ;; both columns carry their own slice of the chapter.
+                  (should (string-match-p
+                           (regexp-quote (plist-get (nth rows lines) :text)) text)))
+                (should (string-match-p
+                         (regexp-quote (plist-get (nth 1 lines) :text))
+                         (buffer-substring-no-properties (point-min) (point-max))))))
+            ;; One column is a key away, and the choice survives the session.
+            (should (= 1 (etaf-weread-toggle-reading-spread app)))
+            (should (= 1 (plist-get (etaf-weread-state app) :reader-shown))))
+        (kill-buffer buffer)))))
 
 (ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()
   "SPC and M-v scroll a long detail pane from the keyboard.

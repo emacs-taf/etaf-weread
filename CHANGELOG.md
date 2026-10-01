@@ -4,6 +4,16 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- Local reading is a reading mode of its own: an open chapter takes the frame
+  body, its text sits in centered columns (one or two, `m`), `[` and `]`
+  adjust the width, `f` turns the whole frame into reading surface, `T` cycles
+  dark/light/sepia, paragraphs are indented the way Chinese books print them,
+  and the running head shows how far the book is read.
+- Reading keys: `j`/`k`, the arrows and the wheel scroll line by line, `g`/`G`
+  jump to the start and end of the chapter, `c` picks a chapter from the
+  book's own list, and `v` returns to the book list.
+- Reading preferences (palette, column width, one or two columns) are stored
+  in `etaf-weread-settings-file` and restored by the next session.
 - First complete reader: shelf with all/reading/finished filters, notebook,
   book detail with table of contents, highlights grouped by chapter, store
   search, reading statistics, Markdown export and opening a book in the web

@@ -105,7 +105,7 @@ line height the page budget counts, and both binding hints must arrive whole."
                  ;; While a local chapter is open the reading pane carries its
                  ;; own key hints instead of the list's.
                  ((eq (plist-get state :pane) 'reader)
-                  (list "C-v/M-v · SPC 翻页" "<next> 翻章 · v 卡片"))
+                  (list "j/k 逐行 · SPC 翻页" "<next> 翻章 · v 书单 · c 选章"))
                  ((eq (plist-get state :layout) 'wide)
                   (list "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"))
                  ((eq (plist-get state :layout) 'narrow) (list "? 帮助"))

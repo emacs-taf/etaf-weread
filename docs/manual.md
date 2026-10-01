@@ -11,6 +11,12 @@
 | `C-v` / `M-v`, `SPC` / `S-SPC` | scroll the detail or highlight pane one page |
 | `d` / `P` | show the detail pane / the highlights of the selected book |
 | `RET` in `本地书` | open the selected local book's first chapter |
+| `f` | reading-only layout: the open chapter owns the frame |
+| `[` / `]` | narrow or widen the reading column (more or less inset) |
+| `m` | show one or two reading columns side by side |
+| `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
+| `g` / `G` | top / end of the open chapter |
+| `c` | jump to a chapter of the open local book |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |
 | `s` `n` `i` `t` `l` | shelf, notebook, local notes index, statistics, local books |
@@ -18,7 +24,7 @@
 | `/` or `S` | search the WeChat Reading store |
 | `I` | index the notebook's highlights into the local database |
 | `g` | reload the current list, account and statistics |
-| `T` | switch between the dark and light palette |
+| `T` | switch to the next palette (dark, light, sepia) |
 | `?` | key summary in the echo area |
 | `q` | close the reader |
 
@@ -29,17 +35,35 @@ instead of the store, and `RET` opens the book of the selected highlight.
 
 The `本地书` section lists every TXT, Markdown and EPUB file in
 `etaf-weread-library-directory` (default `~/ebooks`).  Opening one reads the
-file into chapters and shows the first chapter in the reading pane:
+file into chapters and starts reading:
 
-- the pane is the book text, wrapped to the pane width so nothing is clipped;
-- `C-v`/`M-v` and `SPC`/`S-SPC` scroll the text, `<next>`/`<prior>` turn to the
-  next and previous chapter, and `v` leaves the text for the book card;
+- while a chapter is open the reading pane owns the frame's body: the book
+  list steps aside and comes back when `v` leaves the text for the book card;
+- the text is wrapped to `etaf-weread-reading-measure` columns and the column
+  is centered, so a wide frame stays readable; `[` and `]` adjust the width
+  while reading and the choice is remembered;
+- a frame wide enough for two columns shows them side by side, `m` switches
+  between one and two, and the choice is remembered as well;
+- Chinese paragraphs start with the two-character indent while the chapter
+  heading stays flush, and the running head reports how far the book is read;
+- `j`/`k` (also the arrows and the wheel) scroll line by line, `C-v`/`M-v` and
+  `SPC`/`S-SPC` scroll a page (both columns at once), `<next>`/`<prior>` turn
+  to the next and previous chapter, `g`/`G` jump to its start and end, `c`
+  picks a chapter from the book's own list, and `v` leaves the text for the
+  book list;
+- `f` gives the whole frame to the chapter (no navigation, hint or footer)
+  and `f` again brings the reader back; `T` cycles the palette;
 - the reading head names the book, the chapter number and the chapter title,
   and the file is read from disk, so the account and the backend stay
   untouched.
 
 Only files the person already holds are read; a WeChat Reading title whose text
 lives behind the site's reader still opens in the browser with `o`.
+
+The chosen palette and reading width are stored in
+`etaf-weread-settings-file` (default
+`<user-emacs-directory>/etaf-weread/settings.eld`), so the next session starts
+with them; a corrupt or unreadable file falls back to the defaults.
 
 ## Sections
 
@@ -76,10 +100,13 @@ account and the skill owns the login.
 
 ## Theming
 
-`etaf-weread-theme-mode` selects the `dark` or `light` palette; `T` switches a
-mounted reader and repaints it. Views use `etaf-weread-color` and the ETAF UI
-controls in the subtree follow `etaf-weread-theme-defaults`, so both palettes
-share one layout and the reader renders the same surface in every Emacs theme.
+`etaf-weread-theme-mode` selects the `dark`, `light` or `sepia` palette; `T`
+switches a mounted reader, which repaints every surface with the new palette.
+Views use `etaf-weread-color` and the ETAF UI controls in the subtree follow
+`etaf-weread-theme-defaults`, so every palette shares one layout and the reader
+renders the same surface in every Emacs theme.  `etaf-weread-cycle-theme`
+performs the switch for a scripted or headless session; a mounted caller
+replaces the view afterwards, which is what the key does.
 
 ## Scripting and custom backends
 

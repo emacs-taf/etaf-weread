@@ -31,22 +31,30 @@
            :line "#E1E6EC" :ink "#1C2330" :muted "#5A6371" :dim "#8A93A0"
            :accent "#2F6FED" :accent-soft "#E8EFFD" :gold "#B07A16" :ok "#2E7D5B"
            :warn "#B07A16" :danger "#C0392B" :danger-bg "#FBE4E2" :info "#2C6FA8"
-           :selected "#EDF0F4" :meter "#2F6FED" :cover "#E1E6EC" :quote "#4A6FC0"))
+           :selected "#EDF0F4" :meter "#2F6FED" :cover "#E1E6EC" :quote "#4A6FC0")
+    (sepia :bg "#F4EBD9" :panel "#EFE4CD" :panel2 "#E7D8BC" :panel3 "#DCC9A6"
+           :line "#D9C5A2" :ink "#3B3225" :muted "#6D5E47" :dim "#95846A"
+           :accent "#8A6A2F" :accent-soft "#EDE0C4" :gold "#8A6A2F" :ok "#4C7A54"
+           :warn "#9A6B1F" :danger "#A5442F" :danger-bg "#F0D9CE" :info "#4A6E8A"
+           :selected "#E4D3B2" :meter "#8A6A2F" :cover "#DCC9A6" :quote "#7A6440"))
   "Palette of every supported appearance, keyed by mode.")
 
 (defcustom etaf-weread-theme-mode 'dark
   "Appearance used by a new reader session.
-`dark' (default) renders the reader's own dark surface; `light' uses the light
-palette.  This is independent of the active Emacs theme."
-  :type '(choice (const :tag "Dark" dark) (const :tag "Light" light))
+`dark' (default) renders the reader's own dark surface, `light' the light one
+and `sepia' a warm paper surface for long reading.  This is independent of the
+active Emacs theme."
+  :type '(choice (const :tag "Dark" dark) (const :tag "Light" light)
+                 (const :tag "Sepia" sepia))
   :group 'etaf-weread)
 
 (defun etaf-weread-color (key &optional mode)
   "Return the palette color named KEY.
-MODE defaults to `etaf-weread-theme-mode'.  An unknown KEY signals
-`etaf-weread-error' instead of returning a fallback, because a typo would
-otherwise paint an invisible surface."
-  (let* ((mode (if (eq (or mode etaf-weread-theme-mode) 'light) 'light 'dark))
+MODE defaults to `etaf-weread-theme-mode'; an unknown mode falls back to
+`dark'.  An unknown KEY signals `etaf-weread-error' instead of returning a
+fallback, because a typo would otherwise paint an invisible surface."
+  (let* ((mode (let ((mode (or mode etaf-weread-theme-mode)))
+                 (if (assq mode etaf-weread--palettes) mode 'dark)))
          (palette (cdr (assq mode etaf-weread--palettes)))
          (color (plist-get palette key)))
     (unless (and (keywordp key) color)
@@ -58,7 +66,7 @@ otherwise paint an invisible surface."
 MODE defaults to `etaf-weread-theme-mode'.  The result is passed to
 `etaf-theme-provide' by the application so shared etaf-ui Components use the
 same colors as the reader's own Views."
-  (let* ((dark (not (eq (or mode etaf-weread-theme-mode) 'light)))
+  (let* ((dark (eq (or mode etaf-weread-theme-mode) 'dark))
          (bg (etaf-weread-color :bg mode))
          (panel (etaf-weread-color :panel mode))
          (panel3 (etaf-weread-color :panel3 mode))

@@ -26,12 +26,15 @@ ETAF DB.
   walks and indexes the notebook in the background.
 - Local books: the `本地书` section lists the books in
   `etaf-weread-library-directory`, and a TXT, Markdown or EPUB file opens as a
-  plain-text chapter in the reading pane, wrapped to the pane's width.
+  plain-text chapter that owns the frame body: centered columns (one or two,
+  `m`), adjustable width (`[` / `]`), line and page scrolling, chapter jumps
+  (`<next>` / `c`), a running head with the reading progress and an
+  indent-aware Chinese layout.
 - Export: the selected book's highlights and thoughts are written as Markdown
   by the `weread` skill.
 - Open in the browser: the selected book opens in the WeChat Reading web reader.
-- Two palettes (dark and light) with one key, published as `:ui-*` theme tokens
-  so shared ETAF UI controls follow the same colours.
+- Three palettes (dark, light and sepia) with one key, published as `:ui-*`
+  theme tokens so shared ETAF UI controls follow the same colours.
 - Window layouts: three columns on a wide frame, a glyph-only section rail with
   one pane on a medium one, and a phone-like stacked layout on a narrow one.
 - Headless sessions for scripts and tests: no buffer, no timer and a scripted

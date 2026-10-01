@@ -60,6 +60,11 @@
     (define-key map (kbd "SPC") #'etaf-weread--scroll-pane-down)
     (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
     (define-key map (kbd "v") #'etaf-weread--toggle-pane)
+    (define-key map (kbd "m") #'etaf-weread--toggle-spread)
+    (define-key map (kbd "c") #'etaf-weread--choose-chapter)
+    (define-key map (kbd "f") #'etaf-weread--zen)
+    (define-key map (kbd "[") #'etaf-weread--reading-narrower)
+    (define-key map (kbd "]") #'etaf-weread--reading-wider)
     (define-key map (kbd "d") #'etaf-weread--detail-pane)
     (define-key map (kbd "P") #'etaf-weread--notes-pane)
     (define-key map (kbd "o") #'etaf-weread--open-book)
@@ -80,7 +85,8 @@
     (define-key map (kbd "6") #'etaf-weread--stats)
     (define-key map (kbd "7") #'etaf-weread--index-section)
     (define-key map (kbd "g") #'etaf-weread--refresh)
-    (define-key map (kbd "T") #'etaf-weread--toggle-theme)
+    (define-key map (kbd "G") #'etaf-weread--last-item)
+    (define-key map (kbd "T") #'etaf-weread--cycle-theme)
     (define-key map (kbd "?") #'etaf-weread--help)
     (define-key map (kbd "q") #'etaf-weread-close)
     map)
@@ -153,13 +159,16 @@ an opened reader buffer.")
   "Return the visible lines of MODEL's side pane.
 The highlight pane flattens its groups into line plists; the reading pane
 slices the already-wrapped chapter text.  Both share the pane's scroll and row
-budget, so the scroll clamps and the painted rows always agree."
+budget, so the scroll clamps and the painted rows always agree.  The reading
+pane shows as many lines as its columns can hold."
   (let* ((reader (eq (etaf-weread--effective-pane model) 'reader))
          (lines (if reader
                     (etaf-weread--read model :reader-lines)
                   (etaf-weread--notes-lines
                    (plist-get (etaf-weread--read model :notes) :groups))))
-         (rows (max 1 (etaf-weread--read model :pane-rows)))
+         (rows (if reader
+                   (etaf-weread--pane-page-rows model)
+                 (max 1 (etaf-weread--read model :pane-rows))))
          (scroll (max 0 (min (etaf-weread--read model :pane-scroll)
                              (max 0 (- (length lines) rows))))))
     (when lines
@@ -185,23 +194,31 @@ which is why the same field serves both places."
 ;;; ---------------------------------------------------------------------------
 
 (defun etaf-weread--next-item ()
-  "Move the book selection down."
+  "Move the book selection down, or scroll the chapter one line down."
   (interactive)
-  (etaf-weread-move-selection (etaf-weread--current-model) 1))
+  (let ((model (etaf-weread--current-model)))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread-scroll-pane model 1)
+      (etaf-weread-move-selection model 1))))
 
 (defun etaf-weread--previous-item ()
-  "Move the book selection up."
+  "Move the book selection up, or scroll the chapter one line up."
   (interactive)
-  (etaf-weread-move-selection (etaf-weread--current-model) -1))
+  (let ((model (etaf-weread--current-model)))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread-scroll-pane model -1)
+      (etaf-weread-move-selection model -1))))
 
 (defun etaf-weread--pane-hit-p (xy columns _rows layout pane)
   "Return non-nil when text-cell position XY hits the visible side pane.
 COLUMNS describes the event window; LAYOUT and PANE describe the reader."
-  (and (memq pane '(detail notes))
+  (and (memq pane '(reader detail notes))
        (consp xy) (numberp (car xy)) (numberp (cdr xy))
        (< 0 (cdr xy))
        (if (eq layout 'wide)
-           (and (> (car xy) (max 0 (- columns (cadr etaf-weread--pane-width))))
+           (and (> (car xy) (if (eq pane 'reader)
+                                etaf-weread--sidebar-columns
+                              (max 0 (- columns (cadr etaf-weread--pane-width)))))
                 (< (car xy) columns))
          t)))
 
@@ -234,19 +251,23 @@ COLUMNS describes the event window; LAYOUT and PANE describe the reader."
   (etaf-weread--wheel event 1))
 
 (defun etaf-weread--first-item ()
-  "Select the first book of the list."
+  "Select the first book of the list, or go to the top of the chapter."
   (interactive)
   (let* ((model (etaf-weread--current-model))
          (state (etaf-weread-state model)))
-    (etaf-weread-move-selection model (- (plist-get state :selection)))))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread-scroll-pane model (- (plist-get state :pane-scroll)))
+      (etaf-weread-move-selection model (- (plist-get state :selection))))))
 
 (defun etaf-weread--last-item ()
-  "Select the last book of the list."
+  "Select the last book of the list, or go to the end of the chapter."
   (interactive)
   (let* ((model (etaf-weread--current-model))
          (state (etaf-weread-state model)))
-    (etaf-weread-move-selection model (- (1- (or (plist-get state :rows-total) 1))
-                                         (plist-get state :selection)))))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread-scroll-pane model (or (plist-get state :pane-total) 0))
+      (etaf-weread-move-selection model (- (1- (or (plist-get state :rows-total) 1))
+                                           (plist-get state :selection))))))
 
 (defun etaf-weread--next-page ()
   "Select one page further down the book list."
@@ -286,27 +307,28 @@ The wheel scrolls the pane under the pointer; these keys give the same
 ability to a keyboard, which otherwise cannot move a long table of contents
 or highlight list."
   (interactive)
-  (let* ((model (etaf-weread--current-model))
-         (state (etaf-weread-state model)))
-    (etaf-weread-scroll-pane model (max 1 (or (plist-get state :pane-rows) 10)))))
+  (let ((model (etaf-weread--current-model)))
+    (etaf-weread-scroll-pane model (max 1 (etaf-weread--pane-page-rows model)))))
 
 (defun etaf-weread--scroll-pane-up ()
   "Scroll the side pane one page up."
   (interactive)
-  (let* ((model (etaf-weread--current-model))
-         (state (etaf-weread-state model)))
-    (etaf-weread-scroll-pane model (- (max 1 (or (plist-get state :pane-rows) 10))))))
+  (let ((model (etaf-weread--current-model)))
+    (etaf-weread-scroll-pane model (- (max 1 (etaf-weread--pane-page-rows model))))))
 
 (defun etaf-weread--toggle-pane ()
-  "Switch the side pane between the book detail and its highlights."
+  "Leave the open local chapter for the book list, or switch the side pane.
+While a chapter is open the reading pane owns the body, so `v' is the way back
+to the list; otherwise it switches between the book card and its highlights."
   (interactive)
   (let* ((model (etaf-weread--current-model))
          (pane (etaf-weread--read model :pane)))
-    (if (eq pane 'list)
-        (progn
-          (etaf-weread--write model :pane 'detail)
-          (etaf-weread--schedule-detail model (etaf-weread--selected-id model)))
-      (etaf-weread-toggle-pane model))))
+    (cond
+     ((eq pane 'reader) (etaf-weread--write model :pane 'list))
+     ((eq pane 'list)
+      (etaf-weread--write model :pane 'detail)
+      (etaf-weread--schedule-detail model (etaf-weread--selected-id model)))
+     (t (etaf-weread-toggle-pane model)))))
 
 (defun etaf-weread--detail-pane ()
   "Show the book detail pane."
@@ -381,22 +403,91 @@ With prefix argument REFRESH, re-fetch books that are already indexed."
                             (read-string "搜索书名或作者：")))
 
 (defun etaf-weread--refresh ()
-  "Reload the current list, account and statistics."
-  (interactive)
-  (etaf-weread-refresh (etaf-weread--current-model)))
-
-(defun etaf-weread--toggle-theme ()
-  "Switch the reader between the dark and light palette."
+  "Reload the current list, or return to the top of the open chapter."
   (interactive)
   (let ((model (etaf-weread--current-model)))
-    (setq etaf-weread-theme-mode (if (eq etaf-weread-theme-mode 'dark) 'light 'dark))
-    (etaf-weread--write model :theme (etaf-weread-theme-defaults etaf-weread-theme-mode))
-    (etaf-weread--write model :message
-                        (format "外观：%s" (if (eq etaf-weread-theme-mode 'dark)
-                                              "深色"
-                                            "浅色")))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread--first-item)
+      (etaf-weread-refresh model))))
+
+(defun etaf-weread--choose-chapter ()
+  "Jump to a chapter of the open local book.
+The chapter list is the book's own table of contents, so a reader can reach a
+chapter far away without turning every chapter in between."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (chapters (plist-get (plist-get (etaf-weread-state model) :local)
+                              :chapters)))
+    (if (null chapters)
+        (etaf-weread--write model :message
+                            "先打开一本本地书（l 本地书 · RET 打开）")
+      (let* ((total (length chapters))
+             (candidates
+              (cl-loop for chapter in chapters
+                       for index from 1
+                       collect (cons (format "%d/%d %s"
+                                             index total
+                                             (or (plist-get chapter :title) ""))
+                                     index)))
+             (choice (completing-read "跳转章节： " candidates nil t)))
+        (when (and choice (not (string-empty-p choice)))
+          (etaf-weread-read-chapter model (cdr (assoc choice candidates))))))))
+
+(defun etaf-weread--zen ()
+  "Toggle the reading-only layout of the open local chapter."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (unless (etaf-weread-toggle-zen model)
+      (etaf-weread--write model :message
+                          "先打开一本本地书（l 本地书 · RET 打开），再按 f 全屏阅读"))))
+
+(defun etaf-weread--toggle-spread ()
+  "Show one or two reading columns side by side."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (unless (etaf-weread-toggle-reading-spread model)
+      (etaf-weread--write model :message "先打开一本本地书（l 本地书 · RET 打开）"))))
+
+(defun etaf-weread--reading-narrower ()
+  "Give the reading column two columns more inset."
+  (interactive)
+  (etaf-weread-adjust-reading-measure (etaf-weread--current-model) -2))
+
+(defun etaf-weread--reading-wider ()
+  "Give the reading column two columns less inset."
+  (interactive)
+  (etaf-weread-adjust-reading-measure (etaf-weread--current-model) 2))
+
+(defvar etaf-weread--remounting nil
+  "Non-nil while the view is replaced so the palette repaints.
+The unmount before the new mount must not dispose the session, and the mount
+itself must not fetch the current section again.")
+
+(defun etaf-weread--repaint-palette (model)
+  "Repaint MODEL's buffer after its palette changed.
+The Views resolve their colors from the palette when they render, and a
+Component instance is retained while its props are unchanged.  A palette
+change alone therefore leaves every painted surface with the old colors, so
+the view is replaced instead; the session keeps its content and timers."
+  (when-let* ((buffer (plist-get model :buffer)))
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+        (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
+          (let ((window (get-buffer-window buffer t))
+                (etaf-weread--remounting t))
+            (etaf-unmount runtime)
+            (etaf-mount buffer (etaf-weread-view model)
+                        (etaf-weread--viewport-options window))
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))))))))
+
+(defun etaf-weread--cycle-theme ()
+  "Switch the reader to the next palette."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (etaf-weread-cycle-theme model)
     (when-let* ((buffer (plist-get model :buffer)))
-      (with-current-buffer buffer (etaf-weread--remap-canvas-face)))))
+      (with-current-buffer buffer (etaf-weread--remap-canvas-face)))
+    (etaf-weread--repaint-palette model)))
 
 (defun etaf-weread--remap-canvas-face ()
   "Paint this buffer's unpainted cells with the palette background.
@@ -413,7 +504,8 @@ default face shows the reader background there instead of the frame's."
            " · E 导出笔记 · C-v/M-v 或 SPC 滚动目录/划下面板 · s 书架"
            " · 1/2/3 全部/在读/读完 · n 笔记本"
            " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
-           " · T 深浅色 · q 关闭")))
+           " · 读本地书：j/k 逐行 · SPC 翻页 · g/G 章首尾 · c 选章 · m 单双栏 · f 全屏"
+           " · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points
@@ -447,10 +539,14 @@ the session's timers and pending backend requests."
     (etaf-on-mounted
      (lambda ()
        (etaf-weread--start session)
-       (etaf-weread-refresh session)))
+       ;; Replacing the view to repaint the palette must not fetch the
+       ;; section again; the session already holds it.
+       (unless etaf-weread--remounting
+         (etaf-weread-refresh session))))
     (etaf-on-unmounted
      (lambda ()
-       (etaf-weread--dispose session))))
+       (unless etaf-weread--remounting
+         (etaf-weread--dispose session)))))
   :view
   (flex :flex-direction 'column :width '(vw 100) :height '(vh 100)
         ;; Rows that show symbol glyphs render a little taller than the frame's
@@ -461,12 +557,14 @@ the session's timers and pending backend requests."
     (flex :width 'stretch :flex-grow 1 :flex-basis 'auto :min-height '(lh 0)
           :align-items 'stretch
       (etaf-weread--view-sidebar
-       :if (eq (etaf-weread--read session :layout) 'wide)
+       :if (and (eq (etaf-weread--read session :layout) 'wide)
+                (not (etaf-weread--read session :zen)))
        :groups etaf-weread-sections
        :section (etaf-weread--read session :section)
        :on-locate on-locate)
       (etaf-weread--view-sidebar
-       :if (eq (etaf-weread--read session :layout) 'medium)
+       :if (and (eq (etaf-weread--read session :layout) 'medium)
+                (not (etaf-weread--read session :zen)))
        :compact t
        :groups etaf-weread-sections
        :section (etaf-weread--read session :section)
@@ -512,8 +610,15 @@ the session's timers and pending backend requests."
                            (t "这里还没有内容：g 刷新"))
          :on-press on-press-row))
       (flex :if (etaf-weread--pane-shown-p session)
-            :flex-direction 'column :width etaf-weread--pane-width
-            :flex-grow (if (etaf-weread--compact-layout-p session) 1 0)
+            :flex-direction 'column
+            ;; The reading pane owns the body while a local chapter is open;
+            ;; the card and highlight panes keep their fixed column.
+            :width (if (eq (etaf-weread--effective-pane session) 'reader)
+                       'stretch
+                     etaf-weread--pane-width)
+            :flex-grow (if (or (eq (etaf-weread--effective-pane session) 'reader)
+                               (etaf-weread--compact-layout-p session))
+                           1 0)
             :flex-shrink 0
             :flex-basis 'auto
             :min-width '(ch 0) :min-height '(lh 0)
@@ -535,6 +640,11 @@ the session's timers and pending backend requests."
          :if (and (not (eq (etaf-weread--read session :mode) 'stats))
                   (eq (etaf-weread--effective-pane session) 'reader))
          :title (etaf-weread--read session :reader-title)
+         :zen (etaf-weread--read session :zen)
+         :progress (etaf-weread--read session :reader-progress)
+         :columns (etaf-weread--read session :reader-columns)
+         :spread (etaf-weread--read session :reader-shown)
+         :rows (etaf-weread--read session :pane-rows)
          :lines (etaf-weread--pane-lines session))
         (etaf-weread--view-notes
          :if (and (not (eq (etaf-weread--read session :mode) 'stats))
@@ -554,6 +664,12 @@ the session's timers and pending backend requests."
      :layout (etaf-weread--read session :layout)
      :on-pane on-pane)
     (etaf-weread--view-footer
+     :if (not (etaf-weread--read session :zen))
+     :hint (if (eq (etaf-weread--effective-pane session) 'reader)
+               (if (eq (etaf-weread--read session :layout) 'narrow)
+                   "j/k 逐行 · SPC 翻页 · c 选章"
+                 "j/k 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · [ ] 留白 · T 主题")
+             etaf-weread--footer-hint)
      :account (etaf-weread--read session :account)
      :summary (etaf-weread--read session :summary)
      :message (etaf-weread--read session :message)

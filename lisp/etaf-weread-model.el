@@ -120,6 +120,73 @@ passed over, so browsing stays cheap on the network."
   :type 'number
   :group 'etaf-weread)
 
+(defconst etaf-weread--reading-min-columns 24
+  "Narrowest reading column the reader allows.")
+
+(defconst etaf-weread--reading-max-columns 96
+  "Widest reading column the reader allows.")
+
+(defconst etaf-weread--reader-gutter 3
+  "Columns between two reading columns shown side by side.")
+
+(defcustom etaf-weread-reading-measure 44
+  "Width in columns of one local reading column.
+A local chapter is wrapped to this many columns and the column is centered in
+the reading pane, which is what keeps a wide frame readable.  `[' and `]'
+adjust it while reading and the choice is stored in `etaf-weread-settings-file'."
+  :type 'integer
+  :group 'etaf-weread)
+
+(defcustom etaf-weread-reading-spread 2
+  "Reading columns shown side by side, 1 or 2.
+Two columns use a wide frame instead of leaving it empty, and a frame too
+narrow for both falls back to one; the reader's `m' key toggles the choice."
+  :type '(choice (const :tag "One column" 1) (const :tag "Two columns" 2))
+  :group 'etaf-weread)
+
+(defcustom etaf-weread-settings-file
+  (locate-user-emacs-file "etaf-weread/settings.eld")
+  "File that stores the reading preferences between sessions.
+It keeps the chosen appearance and reading column width, so a new session
+starts where the last one left off.  Bind it before creating a session to keep
+several profiles apart."
+  :type 'file
+  :group 'etaf-weread)
+
+;;; ---------------------------------------------------------------------------
+;;; Reading preferences
+;;; ---------------------------------------------------------------------------
+
+(defun etaf-weread--settings-read ()
+  "Return the stored reading preferences as a property plist.
+A missing file means the defaults, and a corrupt one is ignored rather than
+breaking the session."
+  (condition-case nil
+      (when (file-readable-p etaf-weread-settings-file)
+        (with-temp-buffer
+          (insert-file-contents etaf-weread-settings-file)
+          (let ((stored (read (current-buffer))))
+            (and (listp stored) stored))))
+    (error nil)))
+
+(defun etaf-weread--settings-write (app)
+  "Store APP's reading preferences for the next session.
+The session remembers the file it was created with, so binding
+`etaf-weread-settings-file' around `etaf-weread-create' keeps its writes in
+that file too.  A failed write is reported in the status line instead of
+signalling: losing a preference must not interrupt the reading."
+  (condition-case error
+      (let ((file (or (plist-get app :settings-file) etaf-weread-settings-file)))
+        (make-directory (file-name-directory (expand-file-name file)) t)
+        (with-temp-file file
+          (prin1 (list :theme etaf-weread-theme-mode
+                       :reader-measure (etaf-weread--read app :reader-measure)
+                       :reader-spread (etaf-weread--read app :reader-spread))
+                 (current-buffer))))
+    (error
+     (etaf-weread--write app :message
+                         (format "无法保存阅读设置：%s" (error-message-string error))))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Construction and reactive access
 ;;; ---------------------------------------------------------------------------
@@ -131,12 +198,21 @@ otherwise to `etaf-weread-make-client'.  The session owns no buffer and no
 timer until it is mounted by `etaf-weread-app' or started by
 `etaf-weread-refresh'; it is also a complete headless reader for tests and
 other Lisp callers."
-  (let ((client (or client
-                    (if etaf-weread-client-factory
-                        (funcall etaf-weread-client-factory)
-                      (etaf-weread-make-client)))))
+  (let* ((client (or client
+                     (if etaf-weread-client-factory
+                         (funcall etaf-weread-client-factory)
+                       (etaf-weread-make-client))))
+         (settings (etaf-weread--settings-read))
+         (measure (or (plist-get settings :reader-measure)
+                      etaf-weread-reading-measure))
+         (spread (if (memq (plist-get settings :reader-spread) '(1 2))
+                     (plist-get settings :reader-spread)
+                   etaf-weread-reading-spread)))
+    (when (memq (plist-get settings :theme) '(dark light sepia))
+      (setq etaf-weread-theme-mode (plist-get settings :theme)))
     (list :client client
           :buffer nil
+          :settings-file etaf-weread-settings-file
           :disposed nil
           :started-at nil
           :follow-timer nil
@@ -165,6 +241,13 @@ other Lisp callers."
           :local (etaf-ref nil :name 'etaf-weread-local)
           :reader-lines (etaf-ref nil :name 'etaf-weread-reader-lines)
           :reader-title (etaf-ref "" :name 'etaf-weread-reader-title)
+          :reader-measure (etaf-ref measure :name 'etaf-weread-reader-measure)
+          :reader-columns (etaf-ref measure :name 'etaf-weread-reader-columns)
+          :reader-wrapped (etaf-ref 0 :name 'etaf-weread-reader-wrapped)
+          :reader-spread (etaf-ref spread :name 'etaf-weread-reader-spread)
+          :reader-shown (etaf-ref 1 :name 'etaf-weread-reader-shown)
+          :reader-progress (etaf-ref 0 :name 'etaf-weread-reader-progress)
+          :zen (etaf-ref nil :name 'etaf-weread-zen)
           :detail (etaf-ref nil :name 'etaf-weread-detail)
           :notes (etaf-ref nil :name 'etaf-weread-notes)
           :stats (etaf-ref nil :name 'etaf-weread-stats)
@@ -424,13 +507,25 @@ A local book needs no backend, so the rows appear synchronously."
              (format "本地书库：%s（%d 本）" directory (length rows))
            (format "本地书库目录不存在：%s" directory)))))
 
-(defun etaf-weread--wrap-text (text columns)
+(defconst etaf-weread--paragraph-indent "　　"
+  "Full-width indent a Chinese book starts a paragraph with.")
+
+(defun etaf-weread--wrap-text (text columns &optional indent)
   "Return TEXT as lines no wider than COLUMNS display columns.
 Explicit line breaks are kept, so a poem stays as the file wrote it; a long
-line is folded between characters, counting CJK as two columns."
-  (let ((lines nil))
-    (dolist (line (split-string (replace-regexp-in-string "\t" "    " text) "\n"))
-      (let ((current "") (width 0))
+line is folded between characters, counting CJK as two columns.  When INDENT
+is non-nil it starts every paragraph that follows a blank line, the way a
+Chinese book indents paragraphs; the first line stays flush because it carries
+the chapter heading."
+  (let ((lines nil)
+        (first t)
+        (paragraph-start nil))
+    (dolist (source (split-string (replace-regexp-in-string "\t" "    " text) "\n"))
+      (let* ((blank (string-empty-p (string-trim source)))
+             (line (if (and indent paragraph-start (not blank) (not first))
+                       (concat indent source)
+                     source))
+             (current "") (width 0))
         (dolist (char (string-to-list line))
           (let ((char-width (char-width char)))
             (when (and (> (+ width char-width) columns)
@@ -439,7 +534,9 @@ line is folded between characters, counting CJK as two columns."
               (setq current "" width 0))
             (setq current (concat current (char-to-string char))
                   width (+ width char-width))))
-        (push (string-trim-right current) lines)))
+        (push (string-trim-right current) lines)
+        (setq first nil
+              paragraph-start blank)))
     (nreverse lines)))
 
 (defun etaf-weread--publish-local-chapter (app)
@@ -452,7 +549,8 @@ line is folded between characters, counting CJK as two columns."
     (etaf-batch
       (etaf-weread--write app :reader-lines
                           (cl-loop for line in (etaf-weread--wrap-text
-                                                text etaf-weread--pane-content-columns)
+                                                text (etaf-weread--reading-columns app)
+                                                etaf-weread--paragraph-indent)
                                    for index from 1
                                    collect (list :key index :text line)))
       (etaf-weread--write app :reader-title
@@ -460,8 +558,10 @@ line is folded between characters, counting CJK as two columns."
                                   (or (plist-get local :title) "")
                                   (1+ index) (length chapters)
                                   (or (plist-get chapter :title) "")))
+      (etaf-weread--write app :reader-wrapped (etaf-weread--reading-columns app))
       (etaf-weread--write app :pane 'reader)
       (etaf-weread--sync-pane-total app))
+    (etaf-weread--update-reader-progress app)
     (etaf-weread--note app (or (plist-get local :title) "本地书"))))
 
 (defun etaf-weread-open-local-book (app path)
@@ -495,6 +595,64 @@ Return the chapter index actually shown."
           (etaf-weread--write app :pane-scroll 0))
         (etaf-weread--publish-local-chapter app)
         (1+ next)))))
+
+(defun etaf-weread-toggle-zen (app)
+  "Toggle APP's reading-only layout and return the new value.
+The reading-only layout hides the section navigation, the running hint and the
+footer, so the open local chapter owns the frame; the reading column keeps its
+width and stays centered.  A session that is not showing a local chapter stays
+as it is, because there is nothing to read in zen, and nil is returned."
+  (when (eq (etaf-weread--effective-pane app) 'reader)
+    (let ((zen (not (etaf-weread--read app :zen))))
+      (etaf-weread--write app :zen zen)
+      (etaf-weread--sync-layout app)
+      (etaf-weread--note app (if zen
+                                 "阅读模式：f 返回 · [ ] 留白 · T 主题"
+                               "已退出阅读模式"))
+      zen)))
+
+(defun etaf-weread-adjust-reading-measure (app delta)
+  "Widen APP's reading column by DELTA columns and return its new width.
+The width stays inside the readable range, an open chapter is wrapped again
+so every line still fits, and the choice is stored for the next session."
+  (let ((width (max etaf-weread--reading-min-columns
+                    (min etaf-weread--reading-max-columns
+                         (+ (etaf-weread--read app :reader-measure) delta)))))
+    (etaf-weread--write app :reader-measure width)
+    (etaf-weread--sync-layout app)
+    (etaf-weread--settings-write app)
+    (let ((columns (etaf-weread--reading-columns app)))
+      (etaf-weread--note app (format "阅读宽度：%d 列" columns))
+      columns)))
+
+(defun etaf-weread-toggle-reading-spread (app)
+  "Show one or two reading columns side by side in APP and return the choice.
+Two columns use a wide frame instead of leaving it empty; a frame too narrow
+for both keeps showing one.  The choice is stored for the next session, and
+the session state's `:reader-shown' reports what is actually on screen."
+  (let ((choice (if (= (etaf-weread--read app :reader-spread) 2) 1 2)))
+    (etaf-weread--write app :reader-spread choice)
+    (etaf-weread--sync-layout app)
+    (etaf-weread--settings-write app)
+    (etaf-weread--note app (format "阅读栏数：%d"
+                                   (etaf-weread--read app :reader-shown)))
+    choice))
+
+(defun etaf-weread-cycle-theme (app)
+  "Switch APP to the next appearance and return it.
+The order is `dark', `light' then `sepia'; the choice is stored in
+`etaf-weread-settings-file' so the next session starts with it."
+  (let* ((order '(dark light sepia))
+         (mode (or (cadr (memq etaf-weread-theme-mode order)) 'dark)))
+    (setq etaf-weread-theme-mode mode)
+    (etaf-weread--write app :theme (etaf-weread-theme-defaults mode))
+    (etaf-weread--settings-write app)
+    (etaf-weread--note app (format "外观：%s"
+                                   (pcase mode
+                                     ('dark "深色")
+                                     ('light "浅色")
+                                     (_ "纸色"))))
+    mode))
 
 (defun etaf-weread-search (app keyword)
   "Search the WeChat Reading store for KEYWORD and show the matches.
@@ -741,15 +899,23 @@ background.  A missing book id signals `etaf-weread-error'."
         (etaf-weread--load-notes app id)))
     id))
 
+(defun etaf-weread--local-row-p (row)
+  "Return non-nil when list ROW is a local file rather than a store book."
+  (and row (plist-get row :local)))
+
 (defun etaf-weread--schedule-detail (app id)
   "Make APP's detail pane follow ID after a short quiet period.
 A book whose detail is cached is painted immediately; otherwise the request is
 delayed by `etaf-weread-detail-follow-delay', so fast browsing never asks the
-backend about a book that was only passed over."
+backend about a book that was only passed over.  A local book's id is its file
+path and it has no backend detail, so it is left alone instead of asking the
+shelf about a path and painting a not-found error over the session."
   (when-let* ((timer (plist-get app :follow-timer)))
     (cancel-timer timer)
     (setf (plist-get app :follow-timer) nil))
-  (when (and id (not (plist-get app :disposed)))
+  (when (and id
+             (not (plist-get app :disposed))
+             (not (etaf-weread--local-row-p (etaf-weread--selected-row app))))
     (if (gethash id (plist-get app :detail-cache))
         (etaf-weread--publish-detail app id)
       (etaf-weread--publish-detail app id nil)
@@ -1031,13 +1197,40 @@ single pane.  Opening the notes loads them when they are not cached yet."
                              'notes
                            'detail)))
 
+(defun etaf-weread--pane-page-rows (app)
+  "Return how many rows one page of APP's side pane holds.
+The reading pane shows one row per line per column, so a two-column spread
+advances twice as far as a single column when paging."
+  (let ((rows (max 1 (etaf-weread--read app :pane-rows))))
+    (if (eq (etaf-weread--effective-pane app) 'reader)
+        (* rows (max 1 (etaf-weread--read app :reader-shown)))
+      rows)))
+
+(defun etaf-weread--update-reader-progress (app)
+  "Publish how far APP is through its open local book, in percent.
+The reading head shows it, and it counts the chapter's own position, so
+scrolling inside one chapter moves the number as a reader expects."
+  (let* ((local (etaf-weread--read app :local))
+         (chapters (length (plist-get local :chapters)))
+         (index (or (plist-get local :index) 0))
+         (rows (max 1 (etaf-weread--read app :pane-rows)))
+         (total (max 1 (etaf-weread--read app :pane-total)))
+         (scroll (etaf-weread--read app :pane-scroll))
+         (through (if (<= total rows) 1.0 (/ (float (+ scroll rows)) total)))
+         (progress (if (zerop chapters)
+                       0
+                     (round (* 100 (/ (+ index (min 1.0 through)) chapters))))))
+    (etaf-weread--write app :reader-progress (min 100 progress))))
+
 (defun etaf-weread-scroll-pane (app delta)
-  "Scroll APP's detail or highlight pane by DELTA rows."
+  "Scroll APP's reading, detail or highlight pane by DELTA rows."
   (let* ((total (etaf-weread--read app :pane-total))
-         (size (max 1 (etaf-weread--read app :pane-rows))))
+         (size (etaf-weread--pane-page-rows app)))
     (etaf-weread--write app :pane-scroll
                         (max 0 (min (+ (etaf-weread--read app :pane-scroll) delta)
-                                    (max 0 (- total size)))))))
+                                    (max 0 (- total size)))))
+    (when (eq (etaf-weread--effective-pane app) 'reader)
+      (etaf-weread--update-reader-progress app))))
 
 (defun etaf-weread-reader-url (item)
   "Return the WeChat Reading URL of ITEM, or nil.
@@ -1305,6 +1498,37 @@ a shorter heading.  A compact layout gives the pane the full body height."
       (window-body-width window)
     (frame-width)))
 
+(defun etaf-weread--reader-capacity (app window layout)
+  "Return the columns the reading pane can give its text in WINDOW.
+A zen frame keeps the whole body for the reader; otherwise the section sidebar
+or rail keeps its own columns, and two columns stay clear of the pane's
+padding.  A frame too narrow for LAYOUT still returns a readable floor."
+  (let* ((total (etaf-weread--window-columns window))
+         (chrome (if (etaf-weread--read app :zen)
+                     0
+                   (if (eq layout 'wide)
+                       etaf-weread--sidebar-columns
+                     etaf-weread--rail-columns))))
+    (max etaf-weread--reading-min-columns (- total chrome 2))))
+
+(defun etaf-weread--reading-columns (app)
+  "Return the wrap width of APP's reading column, in columns.
+The preference is capped by what the pane can hold, so no line is clipped
+when the frame is narrower than the chosen measure."
+  (max etaf-weread--reading-min-columns
+       (min (etaf-weread--read app :reader-measure)
+            (or (etaf-weread--read app :reader-columns)
+                etaf-weread-reading-measure))))
+
+(defun etaf-weread--rewrap-local-chapter (app)
+  "Wrap APP's open local chapter again when the reading width changed.
+The painted lines were wrapped for the old width, so without this they would
+clip after a resize or a measure change."
+  (when (and (plist-get (etaf-weread--read app :local) :chapters)
+             (/= (etaf-weread--reading-columns app)
+                 (or (etaf-weread--read app :reader-wrapped) 0)))
+    (etaf-weread--publish-local-chapter app)))
+
 (defun etaf-weread--viewport-options (&optional window)
   "Return mount viewport options sized for WINDOW, or nil when it is dead.
 A mount without them paints at Ebox's default size, which clips the footer
@@ -1325,20 +1549,31 @@ The result is `wide', `medium' or `narrow'; see `etaf-weread-wide-columns' and
 (defun etaf-weread--sync-layout (app &optional window)
   "Match APP's layout, pane visibility and row budgets to WINDOW.
 WINDOW defaults to the window showing APP's buffer.  A headless session keeps
-the wide layout, because it has no viewport to adapt to."
+the wide layout, because it has no viewport to adapt to.  The reading column
+is refitted as well, and an open chapter is wrapped again when its width
+changes."
   (let* ((buffer (plist-get app :buffer))
          (window (or window
                      (and (buffer-live-p buffer) (get-buffer-window buffer t))))
          (layout (if window
                      (etaf-weread--layout-for (etaf-weread--window-columns window))
                    'wide))
-         (size (etaf-weread--page-size-for window layout)))
+         (size (etaf-weread--page-size-for window layout))
+         (capacity (etaf-weread--reader-capacity app window layout))
+         (columns (min (etaf-weread--read app :reader-measure) capacity))
+         (shown (if (and (= (etaf-weread--read app :reader-spread) 2)
+                         (>= capacity (+ (* 2 columns) etaf-weread--reader-gutter)))
+                    2
+                  1)))
     (etaf-batch
       (etaf-weread--write app :layout layout)
       (etaf-weread--write app :page-size size)
       (etaf-weread--write app :pane-rows (etaf-weread--pane-rows-for window layout))
+      (etaf-weread--write app :reader-columns columns)
+      (etaf-weread--write app :reader-shown shown)
       (etaf-weread--clamp-list-position app)
       (etaf-weread--sync-pane-total app))
+    (etaf-weread--rewrap-local-chapter app)
     layout))
 
 (defun etaf-weread--compact-layout-p (app)
@@ -1364,9 +1599,12 @@ the detail pane; a compact layout shows exactly the recorded pane."
       pane)))
 
 (defun etaf-weread--list-shown-p (app)
-  "Return non-nil when APP's book list fits in the frame."
-  (or (not (etaf-weread--compact-layout-p app))
-      (eq (etaf-weread--read app :pane) 'list)))
+  "Return non-nil when APP's book list fits in the frame.
+The reading pane owns the frame's body while a local chapter is open, in every
+layout, so the list steps aside for it."
+  (and (not (eq (etaf-weread--read app :pane) 'reader))
+       (or (not (etaf-weread--compact-layout-p app))
+           (eq (etaf-weread--read app :pane) 'list))))
 
 (defun etaf-weread--pane-shown-p (app)
   "Return non-nil when APP's reading, detail or highlight pane fits in the frame."
@@ -1375,15 +1613,15 @@ the detail pane; a compact layout shows exactly the recorded pane."
 
 (defun etaf-weread--sync-pane-total (app)
   "Recompute the scrollable rows of APP's side pane."
-  (let ((total (pcase (etaf-weread--effective-pane app)
-                 ('reader (length (etaf-weread--read app :reader-lines)))
-                 ('notes (etaf-weread--notes-total app))
-                 (_ (etaf-weread--detail-total app)))))
+  (let* ((total (pcase (etaf-weread--effective-pane app)
+                  ('reader (length (etaf-weread--read app :reader-lines)))
+                  ('notes (etaf-weread--notes-total app))
+                  (_ (etaf-weread--detail-total app))))
+         (page (etaf-weread--pane-page-rows app)))
     (etaf-weread--write app :pane-total total)
     (etaf-weread--write app :pane-scroll
                         (max 0 (min (etaf-weread--read app :pane-scroll)
-                                    (max 0 (- total (max 1 (etaf-weread--read app :pane-rows)))))))))
-
+                                    (max 0 (- total page)))))))
 (defun etaf-weread--detail-total (app)
   "Return the scrollable chapter lines of APP's detail pane."
   (length (plist-get (etaf-value (etaf-weread--ref app :detail)) :chapters)))
@@ -1503,8 +1741,10 @@ The snapshot is a copy: mutating it never changes the reader.  Keys are
 `:window-start', `:page-size', `:rows-total' (loaded count), `:list-total'
 (backend total or the loaded count), `:layout', `:pane', `:pane-rows',
 `:pane-scroll', `:pane-total', `:detail', `:local', `:reader-lines' (the
-wrapped text of the open local chapter), `:reader-title', `:notes',
-`:stats', `:account',
+wrapped text of the open local chapter), `:reader-title', `:reader-measure'
+(the chosen reading column width in columns), `:reader-columns' (the width
+the open chapter is wrapped to), `:zen' (whether the reading-only layout is
+on), `:notes', `:stats', `:account',
 `:summary', `:theme', `:loading', `:error', `:message' and `:viewport-width'
 (the pixel canvas the reader paints)."
   (let* ((rows (etaf-weread--read app :rows))
@@ -1539,6 +1779,12 @@ wrapped text of the open local chapter), `:reader-title', `:notes',
           :local (etaf-weread--read app :local)
           :reader-lines (etaf-weread--read app :reader-lines)
           :reader-title (etaf-weread--read app :reader-title)
+          :reader-measure (etaf-weread--read app :reader-measure)
+          :reader-columns (etaf-weread--read app :reader-columns)
+          :reader-spread (etaf-weread--read app :reader-spread)
+          :reader-shown (etaf-weread--read app :reader-shown)
+          :reader-progress (etaf-weread--read app :reader-progress)
+          :zen (etaf-weread--read app :zen)
           :notes (and notes (copy-sequence notes))
           :stats (and stats (copy-sequence stats))
           :account (let ((account (etaf-weread--read app :account)))

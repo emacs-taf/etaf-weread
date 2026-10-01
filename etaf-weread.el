@@ -78,7 +78,11 @@
 ;; Keys are `:section', `:filter', `:title', `:subtitle', `:mode', `:query',
 ;; `:items', `:visible', `:window-start', `:selection', `:page-size',
 ;; `:rows-total', `:list-total', `:layout', `:pane', `:pane-rows',
-;; `:pane-scroll', `:pane-total', `:detail', `:notes', `:stats', `:account',
+;; `:pane-scroll', `:pane-total', `:detail', `:local' (the open local book),
+;; `:reader-lines' (its wrapped chapter text), `:reader-title',
+;; `:reader-measure' (the chosen column width), `:reader-columns' (the width
+;; the open chapter is wrapped to), `:reader-progress' (percent read), `:zen',
+;; `:notes', `:stats', `:account',
 ;; `:summary', `:index-query', `:index-syncing', `:theme', `:loading',
 ;; `:error', `:message' and `:viewport-width' (the pixel canvas the reader
 ;; mounts into).  The snapshot copies every value, so mutating it never changes
@@ -220,9 +224,31 @@
 ;; over.
 ;;
 ;; Variable: etaf-weread-theme-mode
-;; Palette used by `etaf-weread-color' and `etaf-weread-theme-defaults': `dark'
-;; or `light'.  A mounted reader repaints when a session's `:theme' value
-;; changes, which is what the reader's T key does.
+;; Palette used by `etaf-weread-color' and `etaf-weread-theme-defaults':
+;; `dark' (default), `light' or `sepia'.  A mounted reader replaces its view
+;; when the session's `:theme' value changes, which is what the reader's T key
+;; does, so every painted surface takes the new palette at once.
+;;
+;; Variable: etaf-weread-reading-measure
+;; Width of one local reading column in columns, default 44.
+;; A local chapter is wrapped to this many columns and the column is centered
+;; in the reading pane, which is what keeps a wide frame readable; a window
+;; that cannot hold it shrinks the column instead.  The reader's `[' and `]'
+;; keys adjust it and the choice is stored in `etaf-weread-settings-file'.
+;;
+;; Variable: etaf-weread-reading-spread
+;; Reading columns shown side by side, 1 or 2, default 2.
+;; Two columns use a wide frame instead of leaving it empty and a frame too
+;; narrow for both falls back to one, which the session state's `:reader-shown'
+;; reports.  The reader's `m' key toggles the choice and it is stored in
+;; `etaf-weread-settings-file'.
+;;
+;; Variable: etaf-weread-settings-file
+;; File that stores the reading preferences between sessions, default
+;; `<user-emacs-directory>/etaf-weread/settings.eld'.
+;; It keeps the chosen appearance and reading column width.  Bind it before
+;; creating a session to keep several profiles apart; the session remembers
+;; the file it was created with, including when writing.
 ;;
 ;; Variable: etaf-weread-index-file
 ;; SQLite file of the local highlight index, default
@@ -253,12 +279,45 @@
 ;; Open the local book at PATH in APP's reading pane and return its chapter
 ;; count.  The file is read from disk, so no backend and no account is
 ;; involved; an unreadable or unsupported file signals `etaf-weread-error'.
+;; While a chapter is open the reading pane owns the frame's body in every
+;; layout, and `etaf-weread-toggle-pane' leaves it for the book card.
 ;;
 ;; Function: etaf-weread-read-chapter (app index)
 ;;;###autoload (autoload 'etaf-weread-read-chapter "etaf-weread" nil t)
 ;; Show chapter INDEX (counting from 1) of APP's opened local book.
 ;; INDEX is clamped into range, a session without a local book does nothing,
 ;; and the chapter text replaces the side pane's content.
+;;
+;; Function: etaf-weread-toggle-zen (app)
+;;;###autoload (autoload 'etaf-weread-toggle-zen "etaf-weread" nil t)
+;; Toggle APP's reading-only layout and return the new value.
+;; The reading-only layout hides the section navigation, the running hint and
+;; the footer, so the open local chapter owns the frame; the reading column
+;; keeps its width and stays centered.  A session that is not showing a local
+;; chapter does nothing, because there is nothing to read in zen, and returns
+;; nil.  The state belongs to the session, not to the settings file.
+;;
+;; Function: etaf-weread-adjust-reading-measure (app delta)
+;;;###autoload (autoload 'etaf-weread-adjust-reading-measure "etaf-weread" nil t)
+;; Widen APP's reading column by DELTA columns and return its new width.
+;; The width stays inside the readable range, an open chapter is wrapped again
+;; so no line clips, and the choice is stored in `etaf-weread-settings-file'.
+;;
+;; Function: etaf-weread-toggle-reading-spread (app)
+;;;###autoload (autoload 'etaf-weread-toggle-reading-spread "etaf-weread" nil t)
+;; Show one or two reading columns side by side in APP and return the choice.
+;; Two columns use a wide frame instead of leaving it empty, and the frame's
+;; own width decides whether both fit; `:reader-shown' in the session state
+;; reports what is on screen.  The choice is stored in
+;; `etaf-weread-settings-file'.
+;;
+;; Function: etaf-weread-cycle-theme (app)
+;;;###autoload (autoload 'etaf-weread-cycle-theme "etaf-weread" nil t)
+;; Switch APP to the next appearance and return it.
+;; The order is `dark', `light' then `sepia', and the choice is stored in
+;; `etaf-weread-settings-file'.  The session's `:theme' value is updated so a
+;; mounted view repaints; replacing the view of an already mounted buffer is
+;; the caller's job, which is what the reader's T key does.
 ;;
 ;; Variable: etaf-weread-library-directory
 ;; Directory scanned for local books; see `etaf-weread-library-books'.

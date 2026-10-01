@@ -176,11 +176,14 @@ paragraph break so a chapter stays readable in one pane."
   "Return the plain text of DOM NODE.
 Block elements break lines, so paragraphs survive.  Only `dom-children' is
 walked: a node's cdr also carries attribute conses, and those are not text.
-Markup-only nodes are skipped whole: an XHTML entry opens with the XML
-declaration, which libxml reports as a comment node holding that text."
+Markup-only subtrees are skipped whole: an XHTML entry opens with the XML
+declaration, which libxml reports as a comment node holding that text, and a
+cover page carries its stylesheet as `style' text that must not reach the
+reader.  `head' holds the document metadata; the chapter title is the first
+line of the body instead."
   (cond
    ((stringp node) node)
-   ((memq (car-safe node) '(comment processing-instruction)) "")
+   ((memq (car-safe node) '(comment processing-instruction style script head)) "")
    ((consp node)
     (let ((block (memq (dom-tag node)
                        '(p div h1 h2 h3 h4 h5 h6 li tr br blockquote section article)))
