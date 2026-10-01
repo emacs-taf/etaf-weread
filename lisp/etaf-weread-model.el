@@ -150,6 +150,24 @@ reader's `m' key cycles the choice and it is stored in
   :type '(choice (const :tag "As many as fit" auto) (integer 1 4))
   :group 'etaf-weread)
 
+(defconst etaf-weread--reader-fonts '(small medium large)
+  "Reading font presets, narrowest first.")
+
+(defconst etaf-weread--reader-font-scales
+  '((small . 0.85) (medium . 1.0) (large . 1.3))
+  "Size of each reading font preset relative to the frame's default font.")
+
+(defcustom etaf-weread-reading-font 'medium
+  "Font size preset of a local book's text: `small', `medium' or `large'.
+`medium' keeps the frame's own font; the other presets scale the reading text
+and the row budget together, so a larger font fits fewer rows of the same
+chapter and never overflows the window.  The reader's `F' key cycles the
+presets and the choice is stored in `etaf-weread-settings-file'."
+  :type '(choice (const :tag "Small" small)
+                 (const :tag "Frame default" medium)
+                 (const :tag "Large" large))
+  :group 'etaf-weread)
+
 (defcustom etaf-weread-settings-file
   (locate-user-emacs-file "etaf-weread/settings.eld")
   "File that stores the reading preferences between sessions.
@@ -214,6 +232,7 @@ signalling: losing a preference must not interrupt the reading."
           (prin1 (list :theme etaf-weread-theme-mode
                        :reader-measure (etaf-weread--read app :reader-measure)
                        :reader-spread (etaf-weread--read app :reader-spread)
+                       :reader-font (etaf-weread--read app :reader-font)
                        :positions (plist-get app :positions)
                        :bookmarks (plist-get app :bookmarks))
                  (current-buffer))))
@@ -243,7 +262,11 @@ other Lisp callers."
                    (if (or (eq stored 'auto)
                            (and (integerp stored) (<= 1 stored 4)))
                        stored
-                     etaf-weread-reading-spread))))
+                     etaf-weread-reading-spread)))
+         (font (let ((stored (plist-get settings :reader-font)))
+                 (if (memq stored etaf-weread--reader-fonts)
+                     stored
+                   etaf-weread-reading-font))))
     (when (memq (plist-get settings :theme) '(dark light sepia))
       (setq etaf-weread-theme-mode (plist-get settings :theme)))
     (list :client client
@@ -284,6 +307,10 @@ other Lisp callers."
           :reader-lines (etaf-ref nil :name 'etaf-weread-reader-lines)
           :reader-title (etaf-ref "" :name 'etaf-weread-reader-title)
           :reader-measure (etaf-ref measure :name 'etaf-weread-reader-measure)
+          :reader-font (etaf-ref font :name 'etaf-weread-reader-font)
+          :reader-font-size (etaf-ref nil :name 'etaf-weread-reader-font-size)
+          :reader-line-height (etaf-ref (frame-char-height) :name 'etaf-weread-reader-line-height)
+          :reader-canvas (etaf-ref (frame-height) :name 'etaf-weread-reader-canvas)
           :reader-columns (etaf-ref measure :name 'etaf-weread-reader-columns)
           :reader-wrapped (etaf-ref 0 :name 'etaf-weread-reader-wrapped)
           :reader-spread (etaf-ref spread :name 'etaf-weread-reader-spread)
@@ -628,6 +655,9 @@ signals `etaf-weread-error'."
                                 :index 0))
       (etaf-weread--write app :pane-scroll 0))
     (etaf-weread--publish-local-chapter app)
+    ;; Publishing showed the reading pane, so the canvas may have to shrink
+    ;; before the stored position is resolved against the new row budget.
+    (etaf-weread--sync-layout app)
     (etaf-weread--restore-position app)
     (length chapters)))
 
@@ -840,6 +870,9 @@ Return the chapter index actually shown."
           (etaf-weread--write app :local local)
           (etaf-weread--write app :pane-scroll 0))
         (etaf-weread--publish-local-chapter app)
+        ;; The reader pane is on screen now, so the canvas and row budget
+        ;; follow the reading font before the position is stored.
+        (etaf-weread--sync-layout app)
         (etaf-weread--remember-position app)
         (1+ next)))))
 
@@ -890,6 +923,39 @@ is actually on screen.  The choice is stored for the next session."
                                    (if (eq choice 'auto) "自动" choice)
                                    (etaf-weread--read app :reader-shown)))
     choice))
+
+(defun etaf-weread--reader-font-label (font)
+  "Return the status-line name of the reading FONT preset."
+  (pcase font
+    ('small "小")
+    ('large "大")
+    (_ "中")))
+
+(defun etaf-weread-set-reading-font (app font)
+  "Set APP's reading font preset to FONT and return it.
+FONT is `small', `medium' or `large'; any other value signals
+`etaf-weread-error' and leaves APP unchanged.  `medium' keeps the frame's own
+font, while a scaled preset wraps the open chapter again when the new size
+changes how many columns fit, so no line clips.  The choice is stored in
+`etaf-weread-settings-file'."
+  (unless (memq font etaf-weread--reader-fonts)
+    (signal 'etaf-weread-error
+            (list (format "未知阅读字号：%s" font))))
+  (etaf-weread--write app :reader-font font)
+  (etaf-weread--sync-layout app)
+  (etaf-weread--settings-write app)
+  (etaf-weread--note app (format "阅读字号：%s"
+                                 (etaf-weread--reader-font-label font)))
+  font)
+
+(defun etaf-weread-cycle-reading-font (app)
+  "Show the next reading font preset in APP and return the choice.
+The order is `small', `medium', `large' and back to `small'; the choice is
+stored in `etaf-weread-settings-file' so the next session starts with it."
+  (let* ((current (etaf-weread--read app :reader-font))
+         (rest (cdr (memq current etaf-weread--reader-fonts)))
+         (choice (or (car rest) (car etaf-weread--reader-fonts))))
+    (etaf-weread-set-reading-font app choice)))
 
 (defun etaf-weread-cycle-theme (app)
   "Switch APP to the next appearance and return it.
@@ -1748,18 +1814,166 @@ a shorter heading.  A compact layout gives the pane the full body height."
                    (_ 14))))
     (max 3 (- height chrome))))
 
-(defun etaf-weread--reader-rows-for (window layout zen)
+(defun etaf-weread--reader-font-scale (font)
+  "Return the size ratio of the reading FONT preset.
+An unknown FONT counts as `medium', so a stored preference from a newer
+version never breaks a session."
+  (or (cdr (assq (or font 'medium) etaf-weread--reader-font-scales))
+      (cdr (assq 'medium etaf-weread--reader-font-scales))))
+
+(defun etaf-weread--font-face (pixels)
+  "Return the face Ebox resolves for text of PIXELS CSS reference pixels.
+The projection is the engine's own: CSS pixels convert to integer decipoints,
+and the face carries only the size so the family stays the user's."
+  (list :height (floor (+ (* pixels 7.5) 0.5))))
+
+(defun etaf-weread--font-info (face window &optional sample)
+  "Return SAMPLE's `font-info' metrics under FACE in WINDOW, or nil.
+The reader asks the same question the Ebox font projection asks before it
+paints a text row, so the page budget counts the height that is really used.
+SAMPLE defaults to Latin text; a Chinese book needs its CJK fallback probed
+as well because that font's descent is what makes the row taller."
+  (let* ((probe (propertize (or sample "M ") 'face (or face 'default)))
+         (font (ignore-errors (font-at 0 window probe)))
+         ;; The full XLFD name carries the resolved size; `font-get :name' does
+         ;; not for a fallback font, and `font-info' would then report the
+         ;; family's default size instead of the one the row is painted at.
+         (name (and font (or (and (fboundp 'font-xlfd-name)
+                                  (ignore-errors (font-xlfd-name font)))
+                             (ignore-errors (font-get font :name)))))
+         (frame (if (and window (window-live-p window))
+                    (window-frame window)
+                  (selected-frame))))
+    (and name (ignore-errors (font-info name frame)))))
+
+(defun etaf-weread--frame-line-pixels (window)
+  "Return WINDOW's frame line height in pixels."
+  (let ((frame (if (and window (window-live-p window))
+                   (window-frame window)
+                 (selected-frame))))
+    (max 1 (frame-char-height frame))))
+
+(defun etaf-weread--default-font-pixels (window)
+  "Return the CSS reference pixel size of WINDOW's default font, or nil."
+  (when-let* ((info (etaf-weread--font-info nil window)))
+    (let ((size (aref info 2)))
+      (and (numberp size) (> size 0) size))))
+
+(defvar etaf-weread--font-pixels-cache (make-hash-table :test 'equal)
+  "Resolved CSS pixel size of each reading font target, keyed by frame.
+Fonts resolve to discrete sizes and a display scales CSS reference pixels
+its own way, so a preset is resolved by measuring candidates once per frame.")
+
+(defun etaf-weread--font-actual-pixels (pixels window)
+  "Return the pixel size the font of CSS PIXELS resolves to in WINDOW, or nil."
+  (when-let* ((info (etaf-weread--font-info (etaf-weread--font-face pixels) window)))
+    (let ((size (aref info 2)))
+      (and (numberp size) (> size 0) size))))
+
+(defun etaf-weread--font-pixels-closest (target window)
+  "Return the CSS pixel size whose font is closest to TARGET display pixels.
+The engine converts CSS reference pixels to points before a font is resolved,
+and a display defines how many pixels a point is, so the nominal size is not
+the size that gets painted; the candidates are measured and the closest one
+wins, which keeps small, medium and large apart on every font."
+  (let* ((frame (if (and window (window-live-p window))
+                    (window-frame window)
+                  (selected-frame)))
+         (key (list frame target))
+         (missing (make-symbol "etaf-weread-font-missing"))
+         (cached (gethash key etaf-weread--font-pixels-cache missing)))
+    (if (not (eq cached missing))
+        cached
+      (let ((best nil) (best-distance nil))
+        (dolist (candidate (number-sequence 6 (max 48 (round (* target 2)))))
+          (when-let* ((actual (etaf-weread--font-actual-pixels candidate window)))
+            (let ((distance (abs (- actual target))))
+              (when (or (null best-distance)
+                        (< distance best-distance)
+                        (and (= distance best-distance) (< candidate best)))
+                (setq best candidate best-distance distance)))))
+        (when (> (hash-table-count etaf-weread--font-pixels-cache) 128)
+          (clrhash etaf-weread--font-pixels-cache))
+        (puthash key best etaf-weread--font-pixels-cache)
+        best))))
+
+(defun etaf-weread--reader-font-pixels (app window)
+  "Return the CSS pixel size of APP's reading text, or nil for the frame font.
+`medium' returns nil so the reader keeps the frame's own font untouched; the
+other presets ask for a multiple of that font's pixel size and let the font
+resolution pick the size that comes closest to it."
+  (let ((scale (etaf-weread--reader-font-scale (etaf-weread--read app :reader-font))))
+    (unless (= scale 1.0)
+      (when-let* ((base (etaf-weread--default-font-pixels window)))
+        (etaf-weread--font-pixels-closest (max 1 (round (* base scale))) window)))))
+
+(defun etaf-weread--reader-font-width (app window)
+  "Return the character width of APP's reading text in pixels."
+  (let* ((pixels (etaf-weread--reader-font-pixels app window))
+         (frame (if (and window (window-live-p window))
+                    (window-frame window)
+                  (selected-frame)))
+         (fallback (max 1 (frame-char-width frame))))
+    (or (and pixels
+             (ignore-errors
+               (string-pixel-width
+                (propertize "0" 'face (etaf-weread--font-face pixels)))))
+        fallback)))
+
+(defun etaf-weread--font-line-pixels (pixels window)
+  "Return the pixel line height of the font of CSS PIXELS in WINDOW.
+A line is as tall as the tallest ascent plus the tallest descent of every
+font its text uses, and a Chinese book mixes the frame's Latin font with a
+CJK fallback; probing both keeps the row budget from cutting a line."
+  (let* ((face (etaf-weread--font-face pixels))
+         (probes (delq nil (list (etaf-weread--font-info face window "M ")
+                                 (etaf-weread--font-info face window "汉。")))))
+    (when probes
+      (+ (apply #'max (mapcar (lambda (info) (or (aref info 8) 0)) probes))
+         (apply #'max (mapcar (lambda (info) (or (aref info 9) 0)) probes))))))
+
+(defun etaf-weread--reader-row-pixels (app window)
+  "Return the pixel pitch of APP's reading rows in WINDOW.
+`medium' keeps the frame's own line height, and so does every preset while
+no chapter is on screen: the canvas only has to shrink while scaled rows are
+really painted.  A scaled preset reads the height of the font it will paint,
+and the frame's own line height is a floor, because a blank line and a
+frame-font neighbour stay at least that tall.  A frame that cannot resolve
+fonts (a terminal or a batch run) estimates from the ratio."
+  (let* ((scale (etaf-weread--reader-font-scale (etaf-weread--read app :reader-font)))
+         (char-h (etaf-weread--frame-line-pixels window)))
+    (if (or (= scale 1.0)
+            (not (eq (etaf-weread--effective-pane app) 'reader)))
+        char-h
+      (let* ((pixels (etaf-weread--reader-font-pixels app window))
+             (text (or (and pixels (etaf-weread--font-line-pixels pixels window))
+                       (max 1 (round (* char-h scale))))))
+        (max char-h text)))))
+
+(defun etaf-weread--reader-canvas-lines (window row-height)
+  "Return how many canvas lines WINDOW holds for ROW-HEIGHT pixel rows.
+The renderer plans its canvas in lines of the frame's own height, while a
+scaled reading font paints taller rows; the mount and every refit hand it
+this count, so the painted canvas stays inside the window instead of growing
+past it.  `medium' has ROW-HEIGHT equal to the frame line height, and then
+this is exactly the window's body height."
+  (let* ((char-h (etaf-weread--frame-line-pixels window))
+         (pixels (if (and window (window-live-p window))
+                     (* (window-body-height window) char-h)
+                   (* (frame-height) char-h))))
+    (max 4 (floor pixels (float (max 1 row-height))))))
+
+(defun etaf-weread--reader-rows-for (window layout zen row-height)
   "Return how many text rows one reading column holds in WINDOW.
-The reading view spends a row each on its top padding, the running head and a
-blank separator, plus the footer (two rows on a compact layout) and the
-frame's own bottom padding, and one row stays free below the text.  A zen
-frame hides the head and the footer, so only the padding and the free row
-remain."
-  (let* ((height (if (and window (window-live-p window))
-                     (window-body-height window)
-                   (frame-height)))
-         (chrome (if zen 3 (+ 5 (if (eq layout 'wide) 1 2)))))
-    (max 3 (- height chrome))))
+The reading view spends rows on its top padding, the running head and a blank
+separator, plus the footer and the frame's own bottom padding, and one row
+stays free below the text; a zen frame hides the head and the separator.  The
+canvas holds `etaf-weread--reader-canvas-lines' rows of ROW-HEIGHT pixels, so
+a larger reading font shows fewer of them and never paints past the window."
+  (let ((lines (etaf-weread--reader-canvas-lines window row-height))
+        (outside (if zen 2 (if (eq layout 'wide) 3 4)))
+        (inside (if zen 1 3)))
+    (max 3 (- lines outside inside))))
 
 (defun etaf-weread--window-columns (&optional window)
   "Return WINDOW's body width in columns, or the frame width when it is dead."
@@ -1769,16 +1983,27 @@ remain."
 
 (defun etaf-weread--reader-capacity-for (app window layout)
   "Return the columns the reading pane can give its text in WINDOW.
-A zen frame keeps the whole body for the reader; otherwise the section sidebar
-or rail keeps its own columns, and two columns stay clear of the pane's
-padding.  A frame too narrow for LAYOUT still returns a readable floor."
-  (let* ((total (etaf-weread--window-columns window))
+The count is in the reading font's own character width, so a larger preset
+fits fewer columns in the same pane and a wrapped line still stays inside its
+column.  A zen frame keeps the whole body for the reader; otherwise the
+section sidebar or rail keeps its own columns, and an inset keeps the text
+clear of the pane's edge.  A frame too narrow for LAYOUT still returns a
+readable floor."
+  (let* ((frame (if (and window (window-live-p window))
+                    (window-frame window)
+                  (selected-frame)))
+         (char-w (max 1 (frame-char-width frame)))
+         (pixels (if (and window (window-live-p window))
+                     (* (window-body-width window) char-w)
+                   (* (frame-width frame) char-w)))
          (chrome (if (etaf-weread--read app :zen)
                      0
                    (if (eq layout 'wide)
                        etaf-weread--sidebar-columns
-                     etaf-weread--rail-columns))))
-    (max etaf-weread--reading-min-columns (- total chrome 2))))
+                     etaf-weread--rail-columns)))
+         (unit (etaf-weread--reader-font-width app window)))
+    (max etaf-weread--reading-min-columns
+         (floor (- pixels (* (+ chrome 2) char-w)) (float unit)))))
 
 (defun etaf-weread--reading-columns (app)
   "Return the wrap width of APP's reading column, in columns.
@@ -1813,14 +2038,31 @@ clip after a resize or a measure change."
                  (or (etaf-weread--read app :reader-wrapped) 0)))
     (etaf-weread--publish-local-chapter app)))
 
-(defun etaf-weread--viewport-options (&optional window)
-  "Return mount viewport options sized for WINDOW, or nil when it is dead.
+(defun etaf-weread--viewport-options (app window)
+  "Return mount viewport options for APP sized for WINDOW, or nil when dead.
 A mount without them paints at Ebox's default size, which clips the footer
 until the first resize.  The width is the window's body width in pixels, not a
-whole number of cells, so the reader's background reaches the window edge."
+whole number of cells, so the reader's background reaches the window edge; the
+height is APP's canvas line count, which shrinks with a scaled reading font so
+its taller rows do not paint past the window."
   (when (and window (window-live-p window))
     (list :viewport-width (window-body-width window t)
-          :viewport-height (window-body-height window))))
+          :viewport-height (etaf-weread--read app :reader-canvas))))
+
+(defun etaf-weread--refit-canvas (app window)
+  "Refit APP's mounted canvas after its row pitch changed.
+Changing the reading font does not resize the window, so the framework never
+refits the canvas; without this the canvas would keep its old line count and a
+scaled font would paint past it.  The refit also runs after a real resize,
+where it only confirms the framework's own count."
+  (let* ((buffer (plist-get app :buffer))
+         (runtime (and (buffer-live-p buffer)
+                       (etaf-runtime-for-buffer buffer)))
+         (canvas (etaf-weread--read app :reader-canvas)))
+    (when (and window (window-live-p window)
+               runtime (etaf-runtime-mounted-p runtime)
+               (/= canvas (or (cdr (etaf-runtime-viewport runtime)) 0)))
+      (etaf-runtime-refit runtime (window-body-width window t) canvas))))
 
 (defun etaf-weread--layout-for (columns)
   "Return the layout COLUMNS columns of text can hold.
@@ -1843,6 +2085,9 @@ changes."
                      (etaf-weread--layout-for (etaf-weread--window-columns window))
                    'wide))
          (size (etaf-weread--page-size-for window layout))
+         (font-pixels (etaf-weread--reader-font-pixels app window))
+         (row-height (etaf-weread--reader-row-pixels app window))
+         (canvas (etaf-weread--reader-canvas-lines window row-height))
          (capacity (etaf-weread--reader-capacity-for app window layout))
          (columns (min (etaf-weread--read app :reader-measure) capacity))
          (shown (etaf-weread--reader-shown app capacity columns)))
@@ -1850,15 +2095,20 @@ changes."
       (etaf-weread--write app :layout layout)
       (etaf-weread--write app :page-size size)
       (etaf-weread--write app :pane-rows (etaf-weread--pane-rows-for window layout))
+      (etaf-weread--write app :reader-font-size font-pixels)
+      (etaf-weread--write app :reader-line-height row-height)
+      (etaf-weread--write app :reader-canvas canvas)
       (etaf-weread--write app :reader-rows
                           (etaf-weread--reader-rows-for
-                           window layout (etaf-weread--read app :zen)))
+                           window layout (etaf-weread--read app :zen)
+                           row-height))
       (etaf-weread--write app :reader-capacity capacity)
       (etaf-weread--write app :reader-columns columns)
       (etaf-weread--write app :reader-shown shown)
       (etaf-weread--clamp-list-position app)
       (etaf-weread--sync-pane-total app))
     (etaf-weread--rewrap-local-chapter app)
+    (etaf-weread--refit-canvas app window)
     layout))
 
 (defun etaf-weread--compact-layout-p (app)
@@ -1872,7 +2122,10 @@ compact frame shows one pane at a time; it must leave the side pane it was
 showing.  A wide layout keeps every column, so its pane choice is kept."
   (when (and (etaf-weread--compact-layout-p app)
              (not (eq (etaf-weread--read app :pane) 'list)))
-    (etaf-weread--write app :pane 'list)))
+    (etaf-weread--write app :pane 'list)
+    ;; Leaving the reading pane gives the frame its full canvas back when a
+    ;; scaled reading font had shrunk it.
+    (etaf-weread--sync-layout app)))
 
 (defun etaf-weread--effective-pane (app)
   "Return the pane APP is actually showing.
@@ -2033,9 +2286,11 @@ The snapshot is a copy: mutating it never changes the reader.  Keys are
 (backend total or the loaded count), `:layout', `:pane', `:pane-rows',
 `:pane-scroll', `:pane-total', `:detail', `:local', `:reader-lines' (the
 wrapped text of the open local chapter), `:reader-title', `:reader-measure'
-(the chosen reading column width in columns), `:reader-columns' (the width
-the open chapter is wrapped to), `:zen' (whether the reading-only layout is
-on), `:notes', `:stats', `:account',
+(the chosen reading column width in columns), `:reader-font' (the chosen
+reading font preset), `:reader-font-size' (its CSS pixel size, nil for the
+frame's own font), `:reader-line-height' (one reading row in pixels),
+`:reader-columns' (the width the open chapter is wrapped to), `:zen' (whether
+the reading-only layout is on), `:notes', `:stats', `:account',
 `:summary', `:theme', `:loading', `:error', `:message' and `:viewport-width'
 (the pixel canvas the reader paints)."
   (let* ((rows (etaf-weread--read app :rows))
@@ -2071,6 +2326,9 @@ on), `:notes', `:stats', `:account',
           :reader-lines (etaf-weread--read app :reader-lines)
           :reader-title (etaf-weread--read app :reader-title)
           :reader-measure (etaf-weread--read app :reader-measure)
+          :reader-font (etaf-weread--read app :reader-font)
+          :reader-font-size (etaf-weread--read app :reader-font-size)
+          :reader-line-height (etaf-weread--read app :reader-line-height)
           :reader-columns (etaf-weread--read app :reader-columns)
           :reader-rows (etaf-weread--read app :reader-rows)
           :reader-spread (etaf-weread--read app :reader-spread)

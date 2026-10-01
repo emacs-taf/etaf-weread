@@ -66,6 +66,7 @@
     (define-key map (kbd "m") #'etaf-weread--toggle-spread)
     (define-key map (kbd "c") #'etaf-weread--choose-chapter)
     (define-key map (kbd "f") #'etaf-weread--zen)
+    (define-key map (kbd "F") #'etaf-weread--cycle-font)
     (define-key map (kbd "[") #'etaf-weread--reading-narrower)
     (define-key map (kbd "]") #'etaf-weread--reading-wider)
     (define-key map (kbd "d") #'etaf-weread--detail-pane)
@@ -327,7 +328,11 @@ to the list; otherwise it switches between the book card and its highlights."
   (let* ((model (etaf-weread--current-model))
          (pane (etaf-weread--read model :pane)))
     (cond
-     ((eq pane 'reader) (etaf-weread--write model :pane 'list))
+     ((eq pane 'reader)
+      (etaf-weread--write model :pane 'list)
+      ;; Leaving the chapter gives the frame its full canvas back when a
+      ;; scaled reading font had shrunk it.
+      (etaf-weread--sync-layout model))
      ((eq pane 'list)
       (etaf-weread--write model :pane 'detail)
       (etaf-weread--schedule-detail model (etaf-weread--selected-id model)))
@@ -534,6 +539,11 @@ chapter far away without turning every chapter in between."
     (unless (etaf-weread-toggle-reading-spread model)
       (etaf-weread--write model :message "先打开一本本地书（l 本地书 · RET 打开）"))))
 
+(defun etaf-weread--cycle-font ()
+  "Cycle the reading font preset (small, medium, large)."
+  (interactive)
+  (etaf-weread-cycle-reading-font (etaf-weread--current-model)))
+
 (defun etaf-weread--reading-narrower ()
   "Give the reading column two columns more inset."
   (interactive)
@@ -563,7 +573,7 @@ the view is replaced instead; the session keeps its content and timers."
                 (etaf-weread--remounting t))
             (etaf-unmount runtime)
             (etaf-mount buffer (etaf-weread-view model)
-                        (etaf-weread--viewport-options window))
+                        (etaf-weread--viewport-options model window))
             (etaf-runtime-flush (etaf-runtime-for-buffer buffer))))))))
 
 (defun etaf-weread--cycle-theme ()
@@ -591,7 +601,7 @@ default face shows the reader background there instead of the frame's."
            " · 1/2/3 全部/在读/读完 · n 笔记本"
            " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
            " · 读本地书：j/k 逐行 · SPC 翻页 · g/G 章首尾 · c 选章 · m 单双栏 · f 全屏"
-           " · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
+           " · F 字号 · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points
@@ -728,6 +738,7 @@ the session's timers and pending backend requests."
         (etaf-weread--view-reader
          :if (and (not (eq (etaf-weread--read session :mode) 'stats))
                   (eq (etaf-weread--effective-pane session) 'reader))
+         :font-size (etaf-weread--read session :reader-font-size)
          :title (etaf-weread--read session :reader-title)
          :zen (etaf-weread--read session :zen)
          :progress (etaf-weread--read session :reader-progress)
@@ -756,8 +767,8 @@ the session's timers and pending backend requests."
      :if (not (etaf-weread--read session :zen))
      :hint (if (eq (etaf-weread--effective-pane session) 'reader)
                (if (eq (etaf-weread--read session :layout) 'narrow)
-                   "j/k 逐行 · SPC 翻页 · c 选章"
-                 "j/k 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · [ ] 留白 · T 主题")
+                   "j/k 逐行 · SPC 翻页 · c 选章 · F 字号"
+                 "j/k 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · F 字号 · [ ] 留白 · T 主题")
              etaf-weread--footer-hint)
      :account (etaf-weread--read session :account)
      :summary (etaf-weread--read session :summary)
@@ -815,7 +826,7 @@ section, selection and loaded detail."
     ;; resizes as well (see `etaf-weread--sync-layout').
     (etaf-weread--sync-layout model (selected-window))
     (etaf-mount buffer (etaf-weread-view model)
-                (etaf-weread--viewport-options (selected-window)))
+                (etaf-weread--viewport-options model (selected-window)))
     (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
     buffer))
 

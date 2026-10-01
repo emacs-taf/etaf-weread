@@ -152,6 +152,11 @@
       "purpose": "A reading pane wide enough for two columns paints both slices of the chapter, Chinese paragraphs start indented while the heading stays flush, and the single-column choice is one call away."
     },
     {
+      "name": "etaf-weread-tests-reading-font-presets",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "The reading font cycles small, medium and large, the medium preset keeps the frame font, an unknown preset signals without changing the session, and the choice survives in the settings file."
+    },
+    {
       "name": "etaf-weread-tests-reader-preferences-persist",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "The reading width and the chosen appearance are stored in the settings file and a new session starts with them."

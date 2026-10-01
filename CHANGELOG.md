@@ -13,8 +13,10 @@ All notable user-visible changes to ETAF Weread.
 - Reading keys: `j`/`k`, the arrows and the wheel scroll line by line, `g`/`G`
   jump to the start and end of the chapter, `c` picks a chapter from the
   book's own list, and `v` returns to the book list.
-- Reading preferences (palette, column width, one or two columns) are stored
-  in `etaf-weread-settings-file` and restored by the next session.
+- Reading preferences (palette, column width, one or two columns, font size)
+  are stored in `etaf-weread-settings-file` and restored by the next session;
+  `F` cycles the reading font between small, the frame's own font and large,
+  and the row budget follows the chosen size.
 - Reading inside a local book has bookmarks (`b`, `B`), an in-book search
   (`/`) that lists every occurrence and jumps to the chosen one, and a
   percentage jump (`%`) that lands where the progress bar promises.

@@ -80,10 +80,13 @@
 ;; `:rows-total', `:list-total', `:layout', `:pane', `:pane-rows',
 ;; `:pane-scroll', `:pane-total', `:detail', `:local' (the open local book),
 ;; `:reader-lines' (its wrapped chapter text), `:reader-title',
-;; `:reader-measure' (the chosen column width), `:reader-columns' (the width
-;; the open chapter is wrapped to), `:reader-rows' (one column's height),
-;; `:reader-spread', `:reader-shown' (the columns on screen), `:reader-progress'
-;; (percent read), `:zen', `:notes', `:stats', `:account',
+;; `:reader-measure' (the chosen column width), `:reader-font' (the chosen
+;; font preset), `:reader-font-size' (its CSS pixel size, nil for the frame's
+;; own font), `:reader-line-height' (one reading row in pixels),
+;; `:reader-columns' (the width the open chapter is wrapped to), `:reader-rows'
+;; (one column's height), `:reader-spread', `:reader-shown' (the columns on
+;; screen), `:reader-progress' (percent read), `:zen', `:notes', `:stats',
+;; `:account',
 ;; `:summary', `:index-query', `:index-syncing', `:theme', `:loading',
 ;; `:error', `:message' and `:viewport-width' (the pixel canvas the reader
 ;; mounts into).  The snapshot copies every value, so mutating it never changes
@@ -279,6 +282,14 @@
 ;; screen.  The reader's `m' key cycles the choice and it is stored in
 ;; `etaf-weread-settings-file'.
 ;;
+;; Variable: etaf-weread-reading-font
+;; Reading font preset of a local book, `medium' (the default), `small' or
+;; `large'.
+;; `medium' keeps the frame's own font; the other presets scale the reading
+;; text and the number of rows that fit with it, so a larger font shows fewer
+;; rows of the same chapter.  The reader's `F' key cycles the presets and the
+;; choice is stored in `etaf-weread-settings-file'.
+;;
 ;; Variable: etaf-weread-settings-file
 ;; File that stores the reading preferences between sessions, default
 ;; `<user-emacs-directory>/etaf-weread/settings.eld'.
@@ -357,6 +368,21 @@
 ;; The order is `auto', then one column, two and so on up to what the pane can
 ;; hold, and back to `auto'; `:reader-shown' in the session state reports what
 ;; is on screen.  The choice is stored in `etaf-weread-settings-file'.
+;;
+;; Function: etaf-weread-set-reading-font (app font)
+;;;###autoload (autoload 'etaf-weread-set-reading-font "etaf-weread" nil t)
+;; Set APP's reading font preset to FONT and return it.
+;; FONT is `small', `medium' or `large'; any other value signals
+;; `etaf-weread-error' and leaves APP unchanged.  `medium' keeps the frame's
+;; own font; a scaled preset changes both the text size and the row budget, so
+;; the open chapter is wrapped again when the new size changes how many
+;; columns fit.  The choice is stored in `etaf-weread-settings-file'.
+;;
+;; Function: etaf-weread-cycle-reading-font (app)
+;;;###autoload (autoload 'etaf-weread-cycle-reading-font "etaf-weread" nil t)
+;; Show the next reading font preset in APP and return the choice.
+;; The order is `small', `medium', `large' and back to `small'; the choice is
+;; stored in `etaf-weread-settings-file' so the next session starts with it.
 ;;
 ;; Function: etaf-weread-cycle-theme (app)
 ;;;###autoload (autoload 'etaf-weread-cycle-theme "etaf-weread" nil t)

@@ -16,6 +16,7 @@
 ;;   (etaf-weread-gui-open "150x40")   ; mount the reader at a frame size
 ;;   (etaf-weread-gui-status)          ; one-line state for logging
 ;;   (etaf-weread-gui-keys "jj RET")   ; real keys through the command loop
+;;   (etaf-weread-gui-font 'large)     ; set the reading font preset
 ;;   (etaf-weread-gui-check)           ; layout invariants; nil when healthy
 ;;
 ;; `etaf-weread-gui-wait' polls until the shelf arrives, which keeps a probe
@@ -77,20 +78,31 @@ KEYS is a `kbd' string, so \"jj RET\" moves the selection twice and opens it."
     (execute-kbd-macro (kbd keys)))
   (etaf-weread-gui-status))
 
+(defun etaf-weread-gui-font (font)
+  "Set the probe reader's reading FONT preset and return the new status."
+  (etaf-weread-set-reading-font etaf-weread-gui--model font)
+  (etaf-weread-gui-status))
+
 (defun etaf-weread-gui-canvas-pixels ()
-  "Return (TOTAL . TALL) for the reader canvas in the selected frame.
-TOTAL is the pixel height of every canvas line; TALL counts the lines taller
-than the frame's character height, which the page budget cannot account for."
+  "Return (TOTAL . ODD) for the reader canvas in the selected frame.
+TOTAL is the pixel height of every canvas line.  ODD counts the lines whose
+height is neither the frame's character height nor, while a scaled reading
+font is active, the row height the page budget counted, so a font that grows
+a row past its budget is visible here."
   (with-current-buffer (get-buffer etaf-weread-buffer-name)
-    (let ((total 0) (tall 0))
+    (let* ((state (etaf-weread-gui--state))
+           (allowed (list (frame-char-height)
+                          (or (plist-get state :reader-line-height)
+                              (frame-char-height))))
+           (total 0) (odd 0))
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
           (let ((height (line-pixel-height)))
             (setq total (+ total height))
-            (unless (= height (frame-char-height)) (cl-incf tall)))
+            (unless (member height allowed) (cl-incf odd)))
           (forward-line 1)))
-      (cons total tall))))
+      (cons total odd))))
 
 (defun etaf-weread-gui-check ()
   "Return the layout problems of the displayed reader, or nil when healthy.
@@ -132,7 +144,8 @@ line height the page budget counts, and both binding hints must arrive whole."
                                  (format "widest canvas line %spx exceeds window body width %spx"
                                          widest-line (and window (window-body-width window t))))
                                (unless (zerop (cdr canvas))
-                                 (format "%s row(s) exceed the line height" (cdr canvas)))
+                                 (format "%s row(s) use a height the page budget does not count"
+                                         (cdr canvas)))
                                (seq-find (lambda (hint)
                                            (not (string-match-p (regexp-quote hint) text)))
                                          hints)
@@ -141,6 +154,35 @@ line height the page budget counts, and both binding hints must arrive whole."
                                                  hints)
                                  (format "hint not painted whole: %S" hints))))))
     problems))
+
+(defun etaf-weread-gui-font-pass (path)
+  "Check PATH under every reading font preset and return one report each.
+Each report is (FONT LINE-HEIGHT BUDGETED-ROWS (CANVAS-PIXELS WINDOW-PIXELS)
+PROBLEMS), where PROBLEMS is what `etaf-weread-gui-check' found, so a bad
+row height or an overflowing canvas is visible per preset."
+  (etaf-weread-gui-wait)
+  (etaf-weread-locate etaf-weread-gui--model :local)
+  (etaf-weread-open-local-book etaf-weread-gui--model path)
+  (etaf-weread-gui--flush)
+  (cl-loop for font in '(medium large small)
+           collect
+           (progn
+             (etaf-weread-set-reading-font etaf-weread-gui--model font)
+             (etaf-weread-gui--flush)
+             (let* ((state (etaf-weread-gui--state))
+                    (window (get-buffer-window etaf-weread-buffer-name t))
+                    (canvas (etaf-weread-gui-canvas-pixels)))
+               (list font
+                     (plist-get state :reader-line-height)
+                     (plist-get state :reader-rows)
+                     (list (car canvas) (window-pixel-height window))
+                     (etaf-weread-gui-check))))))
+
+(defun etaf-weread-gui--flush ()
+  "Apply the renderer's retained updates to the probe buffer.
+`line-pixel-height' reads the painted text properties, so no window redisplay
+is needed and a probe never waits on the window system."
+  (etaf-runtime-flush (etaf-runtime-for-buffer (get-buffer etaf-weread-buffer-name))))
 
 (provide 'weread-gui-probe)
 ;;; weread-gui-probe.el ends here

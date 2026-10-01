@@ -790,6 +790,36 @@ reading-only layout drops the navigation and the footer."
                        (buffer-substring-no-properties (point-min) (point-max))))))
         (kill-buffer buffer)))))
 
+(ert-deftest etaf-weread-tests-reading-font-presets ()
+  "The reading font cycles small, medium and large and survives the session.
+The medium preset keeps the frame's own font, a scaled preset is published in
+ the session state together with the row height the page budget counts, and an
+unknown preset signals without changing the session."
+  (setq etaf-weread-tests--requests nil)
+  (let* ((file (make-temp-file "weread-font-" nil ".eld"))
+         (etaf-weread-tests--settings file)
+         (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (progn
+          (should (eq 'medium (plist-get (etaf-weread-state app) :reader-font)))
+          ;; The frame font is the default, so no pixel size is forced.
+          (should-not (plist-get (etaf-weread-state app) :reader-font-size))
+          ;; The cycle is medium, large, small and back to medium.
+          (should (eq 'large (etaf-weread-cycle-reading-font app)))
+          (should (eq 'small (etaf-weread-cycle-reading-font app)))
+          (should (eq 'medium (etaf-weread-cycle-reading-font app)))
+          (should (eq 'large (etaf-weread-set-reading-font app 'large)))
+          (should (eq 'large (plist-get (etaf-weread-state app) :reader-font)))
+          ;; An unknown preset is rejected and the session keeps its choice.
+          (should-error (etaf-weread-set-reading-font app 'huge)
+                        :type 'etaf-weread-error)
+          (should (eq 'large (plist-get (etaf-weread-state app) :reader-font)))
+          ;; A fresh session on the same file starts with the stored preset.
+          (let ((again (etaf-weread-tests--session)))
+            (should (eq 'large (plist-get (etaf-weread-state again) :reader-font)))))
+      (setq etaf-weread-tests--settings nil)
+      (ignore-errors (delete-file file)))))
+
 (ert-deftest etaf-weread-tests-reader-preferences-persist ()
   "The appearance and the reading width are kept for the next session.
 A reader that forgets the chosen width and palette on every restart is not a

@@ -12,6 +12,7 @@
 | `d` / `P` | show the detail pane / the highlights of the selected book |
 | `RET` in `本地书` | open the selected local book's first chapter |
 | `f` | reading-only layout: the open chapter owns the frame |
+| `F` | cycle the reading font: small, medium (the frame's font), large |
 | `[` / `]` | narrow or widen the reading column (more or less inset) |
 | `m` | cycle reading columns: automatic, 1, 2 … as many as fit |
 | `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
@@ -55,6 +56,10 @@ file into chapters and starts reading:
   to the next and previous chapter, `g`/`G` jump to its start and end, `c`
   picks a chapter from the book's own list, and `v` leaves the text for the
   book list;
+- `F` cycles the reading font (small, medium, large); a scaled font shows
+  fewer rows of the chapter, wraps the text again and shrinks the canvas so
+  nothing is cut off at the bottom, and the choice is remembered (leaving the
+  chapter with `v` restores the full-height frame);
 - `f` gives the whole frame to the chapter (no navigation, hint or footer)
   and `f` again brings the reader back; `T` cycles the palette;
 - the reading head names the book, the chapter number and the chapter title,

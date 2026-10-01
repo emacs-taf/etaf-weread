@@ -361,14 +361,17 @@ of LINES is dropped, so a short chapter still fills the first column."
                          (seq-subseq lines start end))))
 
 (etaf-define-component etaf-weread--view-reader
-    (&key title lines zen columns spread rows progress)
+    (&key title lines zen columns spread rows progress font-size)
   "Render one local chapter in the reading pane.
 TITLE is the running head (book, chapter number and chapter title) and
 PROGRESS is how far the book is read, in percent.  LINES is the visible part
 of the chapter text, wrapped to COLUMNS columns; ROWS lines fit one column and
 SPREAD columns (1 or 2) are shown side by side, so this Component never
 measures text and no line is clipped.  The columns stay centered, which is
-what keeps a wide frame readable, and ZEN drops everything but the text."
+what keeps a wide frame readable, and ZEN drops everything but the text.
+FONT-SIZE is the text's CSS pixel size, or nil to keep the frame's font.  It
+scales the glyphs and the `ch' width of the columns; the model's row budget
+counts the taller rows that a scaled font paints."
   :view
   ;; The pane's cross-axis stretch gives this row the pane's width; setting a
   ;; `stretch' width here would resolve to the whole viewport instead.
@@ -376,7 +379,12 @@ what keeps a wide frame readable, and ZEN drops everything but the text."
     ;; The two spacers take equal shares of whatever the pane has left, so the
     ;; columns sit centered no matter how the widths are measured.
     (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0) :min-height '(lh 0))
-    (column :width (list 'ch (+ (* (max 1 (or columns 44)) (max 1 (or spread 1)))
+    ;; The font size lives on the column, not on the line boxes: the column's
+    ;; own `ch' width and the `lh' rows inside it (padding, running head,
+    ;; separator and text) must scale with the text, and the line boxes
+    ;; inherit it.  The model counts those scaled rows in its row budget.
+    (column :font-size font-size
+            :width (list 'ch (+ (* (max 1 (or columns 44)) (max 1 (or spread 1)))
                                     (* (1- (max 1 (or spread 1)))
                                        etaf-weread--reader-gutter)))
             :flex-shrink 0
@@ -404,6 +412,9 @@ what keeps a wide frame readable, and ZEN drops everything but the text."
                 :item-gap '(lh 0)
           ;; The key is the line index: body text repeats empty and blank
           ;; lines, so the text itself cannot key the list.
+          ;; The box keeps a one-line height; a line whose glyphs are taller
+          ;; (a scaled CJK fallback) grows it, and the model budgets that
+          ;; height, so the wrapped text never overflows the pane.
           (box :for (line (cdr slice)) :key (plist-get line :key)
                :height '(lh 1) :overflow 'hidden
             (text (expr (or (plist-get line :text) "")))))))
