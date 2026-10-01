@@ -17,6 +17,9 @@
 | `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
 | `g` / `G` | top / end of the open chapter |
 | `c` | jump to a chapter of the open local book |
+| `b` / `B` | bookmark the reading place / jump to one of the book's bookmarks |
+| `%` | jump to a percentage of the open local book |
+| `/` | search inside the open book while reading (the store otherwise) |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |
 | `s` `n` `i` `t` `l` | shelf, notebook, local notes index, statistics, local books |
@@ -57,6 +60,9 @@ file into chapters and starts reading:
 - the reading head names the book, the chapter number and the chapter title,
   and the file is read from disk, so the account and the backend stay
   untouched;
+- `b` bookmarks the place (the same key removes it), `B` jumps between the
+  book's bookmarks, `/` searches inside the book and jumps to a match, and
+  `%` jumps to a percentage of it;
 - reopening a book continues where the last session stopped: the chapter is
   restored exactly and the position inside it as a fraction, so a different
   frame size or reading width lands in the same place

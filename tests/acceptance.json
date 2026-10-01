@@ -162,6 +162,11 @@
       "purpose": "A local book reopens in the chapter and place the last session stopped at, with the position inside the chapter stored as a fraction."
     },
     {
+      "name": "etaf-weread-tests-bookmarks-search-and-percent",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Inside a local book, a bookmark is added and removed by the same call and jumps back to its place, a search lists every occurrence and lands on the chosen one, and a percentage moves to the promised chapter and position."
+    },
+    {
       "name": "etaf-weread-tests-local-rows-do-not-ask-the-shelf",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Selecting a local row never requests it from the backend while a store row still follows the selection."

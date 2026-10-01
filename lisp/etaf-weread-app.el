@@ -60,6 +60,9 @@
     (define-key map (kbd "SPC") #'etaf-weread--scroll-pane-down)
     (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
     (define-key map (kbd "v") #'etaf-weread--toggle-pane)
+    (define-key map (kbd "b") #'etaf-weread--bookmark)
+    (define-key map (kbd "B") #'etaf-weread--bookmarks)
+    (define-key map (kbd "%") #'etaf-weread--jump-percent)
     (define-key map (kbd "m") #'etaf-weread--toggle-spread)
     (define-key map (kbd "c") #'etaf-weread--choose-chapter)
     (define-key map (kbd "f") #'etaf-weread--zen)
@@ -397,10 +400,93 @@ With prefix argument REFRESH, re-fetch books that are already indexed."
   (etaf-weread-locate (etaf-weread--current-model) :stats))
 
 (defun etaf-weread--search ()
-  "Ask for a keyword and search the WeChat Reading store."
+  "Search the open local book, or the store when no chapter is being read."
   (interactive)
-  (etaf-weread--search-text (etaf-weread--current-model)
-                            (read-string "搜索书名或作者：")))
+  (let ((model (etaf-weread--current-model)))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread--search-local-in model)
+      (etaf-weread--search-text model (read-string "搜索书名或作者：")))))
+
+(defun etaf-weread--search-local-in (model)
+  "Search the open local book of MODEL and jump to the chosen match."
+  (let* ((keyword (read-string "在本书中搜索： "))
+         (matches (condition-case error
+                      (etaf-weread-search-local-book model keyword)
+                    (etaf-weread-error
+                     (etaf-weread--write model :message (error-message-string error))
+                     nil))))
+    (cond
+     ((null matches)
+      (etaf-weread--write model :message (format "没有找到「%s」" keyword)))
+     (t
+      (let* ((candidates
+              (cl-loop for match in matches
+                       collect (cons (format "第 %d 章 %s · %s"
+                                             (1+ (or (plist-get match :chapter) 0))
+                                             (truncate-string-to-width
+                                              (or (plist-get match :title) "") 12 nil nil "…")
+                                             (replace-regexp-in-string
+                                              "\n" " " (or (plist-get match :text) "")))
+                                     match)))
+             (choice (completing-read (format "找到 %d 处： " (length matches))
+                                      candidates nil t)))
+        (when (and choice (not (string-empty-p choice)))
+          (etaf-weread-show-match model (cdr (assoc choice candidates)))))))))
+
+(defun etaf-weread--bookmark ()
+  "Add or remove a bookmark at the reading place."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (state (etaf-weread-state model))
+         (path (plist-get (plist-get state :local) :path))
+         (before (length (and path (etaf-weread--bookmarks-for model path)))))
+    (condition-case error
+        (let ((after (length (etaf-weread-toggle-bookmark model))))
+          (etaf-weread--write model :message
+                              (if (> after before)
+                                  (format "已加书签（第 %d 处，b 取消）" after)
+                                (format "已取消书签（剩 %d 处）" after))))
+      (etaf-weread-error
+       (etaf-weread--write model :message (error-message-string error))))))
+
+(defun etaf-weread--bookmarks ()
+  "Jump to a bookmark of the open local book."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (path (plist-get (plist-get (etaf-weread-state model) :local) :path))
+         (entries (and path (etaf-weread--bookmarks-for model path))))
+    (if (null entries)
+        (etaf-weread--write model :message "这本书还没有书签（b 添加）")
+      (let* ((candidates
+              (cl-loop for entry in entries
+                       collect (cons (format "第 %d 章 · %s"
+                                             (1+ (or (plist-get entry :chapter) 0))
+                                             (truncate-string-to-width
+                                              (replace-regexp-in-string
+                                               "\n" " " (or (plist-get entry :text) ""))
+                                              24 nil nil "…"))
+                                     entry)))
+             (choice (completing-read "跳转书签： " candidates nil t)))
+        (when (and choice (not (string-empty-p choice)))
+          (etaf-weread-show-bookmark model (cdr (assoc choice candidates))))))))
+
+(defun etaf-weread--jump-percent ()
+  "Jump to a percentage of the open local book."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (input (read-string "跳转到百分比（0-100）： ")))
+    (cond
+     ((or (string-empty-p input)
+          (not (string-match-p "\\`[0-9]+\\.?[0-9]* *%?\\'" input)))
+      (etaf-weread--write model :message "输入 0-100 的数字"))
+     (t
+      (let ((percent (string-to-number (replace-regexp-in-string "%" "" input))))
+        (condition-case error
+            (progn
+              (etaf-weread-jump-to-percent model percent)
+              (etaf-weread--write model :message (format "跳到 %.0f%%" (float percent))))
+          (etaf-weread-error
+           (etaf-weread--write model :message (error-message-string error)))))))))
 
 (defun etaf-weread--refresh ()
   "Reload the current list, or return to the top of the open chapter."

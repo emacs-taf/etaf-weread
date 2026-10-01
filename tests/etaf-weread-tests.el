@@ -936,6 +936,53 @@ fraction, so it survives even a different reading width or frame size."
               (should (= 0 (plist-get state :pane-scroll)))))
         (ignore-errors (delete-file file))))))
 
+(ert-deftest etaf-weread-tests-bookmarks-search-and-percent ()
+  "Navigation inside a local book: bookmarks, in-book search and a percent jump.
+A bookmark remembers a place and the same call removes it, search finds every
+occurrence in reading order and lands on the chosen one, and a percentage moves
+to the chapter and the position the progress bar promises."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((file (make-temp-file "weread-nav-" nil ".eld"))
+           (etaf-weread-tests--settings file)
+           (etaf-weread-position-save-delay 0)
+           (path (expand-file-name "long.txt" directory))
+           (app (etaf-weread-tests--session)))
+      (unwind-protect
+          (progn
+            (with-temp-file path
+              (insert "第一章 长文\n")
+              (dotimes (index 40)
+                (insert (format "第%d段：习惯的起点很小，重复才是关键，这一段用来产生行数。\n\n"
+                                index)))
+              (insert "第二章 短章\n这一章很短，只用来验证章位。\n"))
+            (etaf-weread-locate app :local)
+            (etaf-weread-open-local-book app path)
+            (should (= 24 (etaf-weread-adjust-reading-measure app -20)))
+            ;; A bookmark at the current place, removable with the same call.
+            (etaf-weread-scroll-pane app 4)
+            (should (= 1 (length (etaf-weread-toggle-bookmark app))))
+            (should (= 1 (length (plist-get (etaf-weread-state app) :bookmarks))))
+            (etaf-weread-scroll-pane app 8)
+            (should (= 2 (length (etaf-weread-toggle-bookmark app))))
+            ;; Jumping back to the first bookmark restores its place, and the
+            ;; same call there removes it again.
+            (let ((first (car (last (plist-get (etaf-weread-state app) :bookmarks)))))
+              (etaf-weread-show-bookmark app first)
+              (should (= 4 (plist-get (etaf-weread-state app) :pane-scroll)))
+              (should (= 1 (length (etaf-weread-toggle-bookmark app)))))
+            ;; A percentage lands in the chapter the progress bar promises.
+            (should (= 2 (etaf-weread-jump-to-percent app 75)))
+            ;; Search finds every occurrence and lands on the chosen one.
+            (let ((matches (etaf-weread-search-local-book app "重复才是关键")))
+              (should (= 40 (length matches)))
+              (should (= 0 (plist-get (car matches) :chapter)))
+              (should (= 1 (etaf-weread-show-match app (car matches))))
+              (should (< (plist-get (etaf-weread-state app) :pane-scroll) 4)))
+            (should-error (etaf-weread-search-local-book app "   ")
+                          :type 'etaf-weread-error))
+        (ignore-errors (delete-file file))))))
+
 (ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()
   "SPC and M-v scroll a long detail pane from the keyboard.
 The wheel scrolls the pane under the pointer; without keys a keyboard-only

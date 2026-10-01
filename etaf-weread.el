@@ -108,6 +108,40 @@
 ;; FILTER is `all', `reading' or `finished'; the matching section is shown and
 ;; any other value signals `etaf-weread-error'.
 ;;
+;; Function: etaf-weread-toggle-bookmark (app)
+;;;###autoload (autoload 'etaf-weread-toggle-bookmark "etaf-weread" nil t)
+;; Add or remove a bookmark at APP's reading place and return this book's
+;; bookmarks, newest first.
+;; A bookmark within a fiftieth of the current place counts as the same one, so
+;; the same call removes what it added; the list lives in
+;; `etaf-weread-settings-file' and at most two hundred bookmarks are kept.
+;;
+;; Function: etaf-weread-show-bookmark (app bookmark)
+;;;###autoload (autoload 'etaf-weread-show-bookmark "etaf-weread" nil t)
+;; Show BOOKMARK in APP and return the chapter it lands in.
+;; The chapter is exact and the position inside it comes from the stored
+;; fraction, so a bookmark survives a different frame size or reading width.
+;;
+;; Function: etaf-weread-jump-to-percent (app percent)
+;;;###autoload (autoload 'etaf-weread-jump-to-percent "etaf-weread" nil t)
+;; Move APP to PERCENT (0-100) of its open local book and return the chapter
+;; shown, counting from 1.
+;; The chapter covering PERCENT is shown and the position inside it follows the
+;; rest of the percentage; a session without a local book signals
+;; `etaf-weread-error'.
+;;
+;; Function: etaf-weread-search-local-book (app keyword)
+;;;###autoload (autoload 'etaf-weread-search-local-book "etaf-weread" nil t)
+;; Return APP's local book matches for KEYWORD, in reading order.
+;; Each match is (:chapter INDEX :title TITLE :needle NEEDLE :text EXCERPT) with
+;; INDEX counting from 0; an empty KEYWORD signals `etaf-weread-error', and at
+;; most two hundred matches are returned.
+;;
+;; Function: etaf-weread-show-match (app match)
+;;;###autoload (autoload 'etaf-weread-show-match "etaf-weread" nil t)
+;; Show MATCH in APP, scroll until the match is on screen, and return the
+;; chapter it lands in.
+;;
 ;; Function: etaf-weread-search (app keyword)
 ;; Search the WeChat Reading store for KEYWORD and show the results.
 ;; The keyword is trimmed; a blank KEYWORD signals `etaf-weread-error' without

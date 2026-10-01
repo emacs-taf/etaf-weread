@@ -179,6 +179,12 @@ scrolled position settles before it is written."
 (defconst etaf-weread--position-limit 50
   "Local books whose reading position is kept.")
 
+(defconst etaf-weread--bookmark-limit 200
+  "Bookmarks kept across all local books.")
+
+(defconst etaf-weread--search-match-limit 200
+  "Most matches an in-book search returns.")
+
 ;;; ---------------------------------------------------------------------------
 ;;; Reading preferences
 ;;; ---------------------------------------------------------------------------
@@ -208,7 +214,8 @@ signalling: losing a preference must not interrupt the reading."
           (prin1 (list :theme etaf-weread-theme-mode
                        :reader-measure (etaf-weread--read app :reader-measure)
                        :reader-spread (etaf-weread--read app :reader-spread)
-                       :positions (plist-get app :positions))
+                       :positions (plist-get app :positions)
+                       :bookmarks (plist-get app :bookmarks))
                  (current-buffer))))
     (error
      (etaf-weread--write app :message
@@ -243,6 +250,8 @@ other Lisp callers."
           :buffer nil
           :settings-file etaf-weread-settings-file
           :positions (let ((stored (plist-get settings :positions)))
+                       (and (listp stored) stored))
+          :bookmarks (let ((stored (plist-get settings :bookmarks)))
                        (and (listp stored) stored))
           :position-timer nil
           :disposed nil
@@ -689,6 +698,134 @@ place.  A book without a stored position keeps its first chapter."
           ;; `etaf-weread-read-chapter' recorded the top of the chapter on its
           ;; way here; correct the record to the restored position.
           (etaf-weread--remember-position app))))))
+
+(defun etaf-weread--reader-line-text (app index)
+  "Return the text of APP's visible line INDEX, or nil."
+  (let ((lines (etaf-weread--read app :reader-lines)))
+    (when (and lines (>= index 0) (< index (length lines)))
+      (plist-get (nth index lines) :text))))
+
+(defun etaf-weread--bookmarks-for (app path)
+  "Return APP's bookmarks for PATH, newest first."
+  (seq-filter (lambda (entry) (equal (plist-get entry :path) path))
+              (plist-get app :bookmarks)))
+
+(defun etaf-weread-toggle-bookmark (app)
+  "Add or remove a bookmark at APP's reading place.
+A bookmark within a fiftieth of the current place counts as the same one, so
+the same key removes what it added.  Return the current book's bookmarks,
+newest first; the list is stored in `etaf-weread-settings-file'."
+  (let* ((local (etaf-weread--read app :local))
+         (path (plist-get local :path))
+         (record (etaf-weread--position-record app)))
+    (unless (and path record)
+      (signal 'etaf-weread-error '("先打开一本本地书")))
+    (let* ((same (lambda (entry)
+                   (and (equal (plist-get entry :chapter) (plist-get record :chapter))
+                        (< (abs (- (or (plist-get entry :fraction) 0.0)
+                                   (or (plist-get record :fraction) 0.0)))
+                           0.02))))
+           (existing (seq-find same (etaf-weread--bookmarks-for app path)))
+           (bookmark (list :path path
+                           :chapter (plist-get record :chapter)
+                           :fraction (plist-get record :fraction)
+                           :text (or (etaf-weread--reader-line-text
+                                      app (etaf-weread--read app :pane-scroll))
+                                     "")
+                           :at (float-time))))
+      (setf (plist-get app :bookmarks)
+            (if existing
+                (seq-remove same (plist-get app :bookmarks))
+              (seq-take (cons bookmark (plist-get app :bookmarks))
+                        etaf-weread--bookmark-limit)))
+      (etaf-weread--settings-write app)
+      (etaf-weread--bookmarks-for app path))))
+
+(defun etaf-weread-show-bookmark (app bookmark)
+  "Show BOOKMARK in APP and return the chapter it lands in.
+The chapter is exact and the position inside it comes from the stored
+fraction, so a bookmark survives a different frame size or reading width."
+  (let ((chapter (etaf-weread-read-chapter
+                  app (1+ (or (plist-get bookmark :chapter) 0)))))
+    (let* ((rows (max 1 (etaf-weread--pane-page-rows app)))
+           (total (max 1 (etaf-weread--read app :pane-total)))
+           (span (max 0 (- total rows)))
+           (target (round (* (or (plist-get bookmark :fraction) 0.0) span))))
+      (etaf-weread-scroll-pane app (- target (etaf-weread--read app :pane-scroll)))
+      (etaf-weread--remember-position app)
+      chapter)))
+
+(defun etaf-weread-jump-to-percent (app percent)
+  "Move APP to PERCENT (0-100) of its open local book.
+The chapter covering PERCENT is shown and the position inside it follows the
+rest of the percentage, so the progress bar a reader sees matches the place.
+Return the chapter actually shown, counting from 1."
+  (let* ((local (etaf-weread--read app :local))
+         (chapters (length (plist-get local :chapters))))
+    (when (zerop chapters)
+      (signal 'etaf-weread-error '("先打开一本本地书")))
+    (let* ((share (max 0.0 (min 100.0 (float percent))))
+           (exact (* (/ share 100.0) chapters))
+           (index (min (1- chapters) (floor exact)))
+           (within (- exact index))
+           (shown (etaf-weread-read-chapter app (1+ index)))
+           (rows (max 1 (etaf-weread--pane-page-rows app)))
+           (total (max 1 (etaf-weread--read app :pane-total)))
+           (span (max 0 (- total rows))))
+      (etaf-weread-scroll-pane app (round (* within span)))
+      shown)))
+
+(defun etaf-weread-search-local-book (app keyword)
+  "Return APP's local book matches for KEYWORD, in reading order.
+Each match is (:chapter INDEX :title TITLE :needle NEEDLE :text EXCERPT), with
+INDEX counting from 0; an empty KEYWORD signals `etaf-weread-error'.  At most
+`etaf-weread--search-match-limit' matches are returned, so searching a long
+book stays cheap."
+  (let ((needle (string-trim (or keyword ""))))
+    (when (string-empty-p needle)
+      (signal 'etaf-weread-error '("搜索关键词不能为空")))
+    (let* ((chapters (plist-get (etaf-weread--read app :local) :chapters))
+           (index -1)
+           (matches nil))
+      (dolist (chapter chapters)
+        (cl-incf index)
+        (let* ((text (or (plist-get chapter :text) ""))
+               (position 0))
+          (while (and (< position (length text))
+                      (< (length matches) etaf-weread--search-match-limit))
+            (let ((hit (string-match (regexp-quote needle) text position)))
+              (if (not hit)
+                  (setq position (length text))
+                (push (list :chapter index
+                            :title (or (plist-get chapter :title) "")
+                            :needle needle
+                            :text (substring text
+                                             (max 0 (- hit 12))
+                                             (min (length text) (+ hit 28))))
+                      matches)
+                (setq position (+ hit (max 1 (length needle)))))))))
+      (nreverse matches))))
+
+(defun etaf-weread-show-match (app match)
+  "Show MATCH in APP and scroll until the match is on screen.
+Return the chapter it lands in, counting from 1."
+  (let ((chapter (etaf-weread-read-chapter app (1+ (or (plist-get match :chapter) 0)))))
+    (let* ((needle (or (plist-get match :needle) ""))
+           (lines (etaf-weread--read app :reader-lines))
+           (rows (max 1 (etaf-weread--pane-page-rows app)))
+           (index 0)
+           (found nil))
+      (while (and lines (< index (length lines)) (not found))
+        (when (string-match-p (regexp-quote needle)
+                              (or (plist-get (nth index lines) :text) ""))
+          (setq found index))
+        (cl-incf index))
+      (when found
+        (etaf-weread-scroll-pane
+         app (- (max 0 (- found (/ rows 3)))
+                (etaf-weread--read app :pane-scroll))))
+      (etaf-weread--remember-position app)
+      chapter)))
 
 (defun etaf-weread-read-chapter (app index)
   "Show chapter INDEX (counting from 1) of APP's opened local book.
@@ -1940,6 +2077,8 @@ on), `:notes', `:stats', `:account',
           :reader-shown (etaf-weread--read app :reader-shown)
           :reader-capacity (etaf-weread--read app :reader-capacity)
           :reader-progress (etaf-weread--read app :reader-progress)
+          :bookmarks (let ((bookmarks (plist-get app :bookmarks)))
+                       (and bookmarks (copy-sequence bookmarks)))
           :zen (etaf-weread--read app :zen)
           :notes (and notes (copy-sequence notes))
           :stats (and stats (copy-sequence stats))
