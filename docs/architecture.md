@@ -24,17 +24,19 @@ never show three columns the list cannot render in (below it the medium layout
 keeps a glyph rail and one pane at a time).  `etaf-weread--list-min-columns`
 records how many columns a full row spends outside its title.
 
-Every row of the canvas must stay exactly one line height.  The model budgets
-the page from the window's height in lines (`etaf-weread--page-size-for`), so a
-row carrying a larger `:font-size` makes the canvas taller in pixels than the
-rows it was budgeted for, and the window silently clips its bottom rows.  Use
-weight and colour for emphasis instead, or reserve whole `lh` rows for a larger
-element.
+No row may be taller than the row height the page budget counted.  Chrome rows
+use the frame's line height; the reading column may scale its text (see
+Reading font), and then the model budgets the pitch that font really paints and
+hands the renderer a shorter canvas (`etaf-weread--reader-canvas-lines`), so a
+scaled chapter never paints past the window.  A row may be *shorter* than the
+budget — a blank or Latin-only row does not reach the height a CJK row does —
+so the invariant is "taller than the budget", not equality.
 Fallback fonts are common offenders: a symbol can use Sarasa at 18px or Arial
 Unicode at 19px, and a bold symbol can make the row taller still.  Prefer CJK
-glyph icons, leave symbols unbolded, and never use inline `:font-size` in a row.
-Validate with `etaf-weread-gui-check` in `scripts/weread-gui-probe.el`: canvas
-pixels must equal window pixels and no row may be taller.
+glyph icons and leave symbols unbolded.
+Validate with `etaf-weread-gui-check` in `scripts/weread-gui-probe.el`: the
+canvas must fit the window, no row may exceed the budgeted row height, and
+every line must fit the body width.
 
 ## Reading pane
 
@@ -44,6 +46,35 @@ into the same side pane the card and the highlights use.  The model wraps the
 chapter to `etaf-weread--pane-content-columns` before publishing, so the pane
 counts and scrolls rows that are already the right width and no line is
 clipped; `<next>`/`<prior>` turn chapters while that pane is shown.
+
+## Reading font
+
+The `small`, `medium` and `large` presets scale only the reading column.  The
+engine converts CSS reference pixels to points before it resolves a font, and a
+frame defines how many pixels a point is, so the nominal size is not the size
+that gets painted; the model measures candidate sizes in the frame and keeps
+the one whose resolved font is closest to the preset's target
+(`etaf-weread--font-pixels-closest`).
+
+The row height is not the nominal line height either: a line is as tall as the
+tallest ascent plus the tallest descent of every font it uses, and a Chinese
+book mixes the frame's Latin font with a CJK fallback that is often one pixel
+taller.  `etaf-weread--font-line-pixels` probes both, the budget uses the
+taller result, and the canvas line count shrinks with it
+(`etaf-weread--reader-canvas-lines`), because the renderer plans its canvas in
+frame line heights.  Leaving the chapter restores the full-height canvas.
+
+## Local notes overlay
+
+`etaf-weread-match-local-notes` matches the account's highlights to the open
+local book: the notebook is searched for the local title (normalised without
+spaces and punctuation), the best match's highlights are fetched, and each
+highlight is kept only when its whitespace-free text appears in the local
+chapters, so another edition contributes only the passages it shares.  The
+matches live in the session's `:local-notes`, and the model marks the wrapped
+lines they cover with `:note`, which the reading view paints with the accent
+surface.  Matching is asynchronous like every backend action and runs when a
+local book is opened (`etaf-weread-local-note-matching`).
 
 ## Data flow
 
