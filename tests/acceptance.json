@@ -117,6 +117,11 @@
       "purpose": "The wide status bar and the compact tab row each paint their binding hint whole, so no layout clips the summary off."
     },
     {
+      "name": "etaf-weread-tests-replaced-keys-run-the-reader-command",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Keys the renderer also binds (n, q, PageUp/PageDown) run the reader command instead of a renderer scroll, so the documented keyboard contract holds."
+    },
+    {
       "name": "etaf-weread-tests-open-and-close-own-a-buffer",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Opening installs the reader keymap, hides the mode line and paints the shelf; closing kills the buffer."

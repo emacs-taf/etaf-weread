@@ -521,6 +521,28 @@ columns they are painted in, so no layout cuts the summary off."
       (when (get-buffer " *etaf-weread-tests-other*")
         (kill-buffer " *etaf-weread-tests-other*")))))
 
+(ert-deftest etaf-weread-tests-replaced-keys-run-the-reader-command ()
+  "The keys the renderer also binds run the reader command, not its scroll.
+`n', `q' and the page keys are scroll or window bindings in the renderer's
+minor-mode map, which shadows a major-mode map unless the reader overrides
+them."
+  (setq etaf-weread-tests--requests nil)
+  (let ((etaf-weread-buffer-name " *etaf-weread-tests-keys*")
+        (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (let ((buffer (etaf-weread-open app)))
+          (with-current-buffer buffer
+            (execute-kbd-macro (kbd "n"))
+            (should (eq :notebook (plist-get (etaf-weread-state app) :section)))
+            (execute-kbd-macro (kbd "<next>"))
+            (should (> (plist-get (etaf-weread-state app) :selection) 0))
+            (execute-kbd-macro (kbd "<prior>"))
+            (should (= 0 (plist-get (etaf-weread-state app) :selection)))
+            (execute-kbd-macro "q")
+            (should-not (buffer-live-p buffer))))
+      (when (get-buffer " *etaf-weread-tests-keys*")
+        (kill-buffer " *etaf-weread-tests-keys*")))))
+
 (ert-deftest etaf-weread-tests-open-and-close-own-a-buffer ()
   "Opening installs the reader keymap and closing kills the buffer."
   (setq etaf-weread-tests--requests nil)

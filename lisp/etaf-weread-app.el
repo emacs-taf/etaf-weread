@@ -84,15 +84,27 @@ It keeps Ebox's TAB focus cycling and RET activation, and replaces the
 scrolling keys with reader commands: j/k move the selection, v switches the
 side pane, and o opens the selected book in the browser.")
 
-(defvar etaf-weread--wheel-maps
+(defvar etaf-weread--command-maps
   (list (cons 'etaf-weread--model
               (let ((map (make-sparse-keymap)))
                 (define-key map [wheel-up] #'etaf-weread--wheel-up)
                 (define-key map [wheel-down] #'etaf-weread--wheel-down)
+                ;; These four are scroll or window keys in the renderer's own
+                ;; minor-mode map, which wins over a major-mode map.  The reader
+                ;; replaces them, so it owns them here where it can win; the
+                ;; mode map keeps the documented bindings for a buffer that was
+                ;; never opened.  TAB and focused RET activation stay with the
+                ;; renderer.
+                (define-key map (kbd "n") #'etaf-weread--notebook)
+                (define-key map (kbd "q") #'etaf-weread-close)
+                (define-key map (kbd "<next>") #'etaf-weread--next-page)
+                (define-key map (kbd "<prior>") #'etaf-weread--previous-page)
                 map)))
-  "Wheel bindings that take precedence over the renderer's minor-mode map.
-Only wheel events are overridden, so TAB and focused RET activation still
-reach the renderer.  The alist is enabled only in an opened reader buffer.")
+  "Reader bindings that must beat the renderer's own minor-mode map.
+`emulation-mode-map-alists' entries take precedence over every minor mode, so
+this alist lets the reader replace renderer scroll keys (`n', `q' and the page
+keys) instead of having them silently shadowed.  The alist is enabled only in
+an opened reader buffer.")
 
 (defun etaf-weread--current-model ()
   "Return the model of the current reader buffer."
@@ -517,8 +529,8 @@ section, selection and loaded detail."
       (setq-local truncate-lines t)
       (setq-local mode-line-format nil)
       (setq-local emulation-mode-map-alists
-                  (cons 'etaf-weread--wheel-maps
-                        (remq 'etaf-weread--wheel-maps emulation-mode-map-alists)))
+                  (cons 'etaf-weread--command-maps
+                        (remq 'etaf-weread--command-maps emulation-mode-map-alists)))
       ;; The reader owns every column it paints.  A sub-cell rounding
       ;; remainder must not surface as Emacs's truncation glyph, so keep the
       ;; truncation slot blank instead of advertising a cut line.
