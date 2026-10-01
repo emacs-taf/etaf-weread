@@ -521,6 +521,46 @@ columns they are painted in, so no layout cuts the summary off."
       (when (get-buffer " *etaf-weread-tests-other*")
         (kill-buffer " *etaf-weread-tests-other*")))))
 
+(ert-deftest etaf-weread-tests-section-switches-return-to-the-list-on-compact ()
+  "A section switch shows the list pane again on a compact frame.
+A compact frame shows one pane at a time, so browsing another section must
+not leave the reader on the side pane it was showing; a wide frame keeps
+its pane choice."
+  (setq etaf-weread-tests--requests nil)
+  (let ((etaf-weread-buffer-name " *etaf-weread-tests-compact*")
+        (app (etaf-weread-tests--session))
+        (headless (get-buffer-create " *etaf-weread-tests-compact-wide*"))
+        (narrow nil))
+    (unwind-protect
+        (progn
+          ;; Headless (wide): a section switch keeps the pane.
+          (etaf-mount headless (etaf-weread-view app)
+                      (list :viewport-width 1200 :viewport-height 40))
+          (etaf-weread-show-book app "1" 'notes)
+          (etaf-weread-locate app :notebook)
+          (should (eq 'notes (plist-get (etaf-weread-state app) :pane)))
+          (kill-buffer headless)
+          ;; Compact: the same switch brings the list back into view.
+          (let ((buffer (etaf-weread-open app)))
+            (setq narrow (split-window (selected-window) 25 'right))
+            (set-window-buffer (selected-window)
+                               (get-buffer-create " *etaf-weread-tests-other*"))
+            (set-window-buffer narrow buffer)
+            (select-window narrow)
+            (etaf-weread-refresh app)
+            (etaf-weread-show-book app "1" 'notes)
+            (should (eq 'notes (plist-get (etaf-weread-state app) :pane)))
+            (etaf-weread-locate app :notebook)
+            (should (eq 'list (plist-get (etaf-weread-state app) :pane)))))
+      (when (and narrow (window-live-p narrow)
+                 (not (eq narrow (selected-window))))
+        (delete-window narrow))
+      (when (get-buffer " *etaf-weread-tests-compact*")
+        (kill-buffer " *etaf-weread-tests-compact*"))
+      (when (get-buffer " *etaf-weread-tests-other*")
+        (kill-buffer " *etaf-weread-tests-other*"))
+      (when (buffer-live-p headless) (kill-buffer headless)))))
+
 (ert-deftest etaf-weread-tests-replaced-keys-run-the-reader-command ()
   "The keys the renderer also binds run the reader command, not its scroll.
 `n', `q' and the page keys are scroll or window bindings in the renderer's

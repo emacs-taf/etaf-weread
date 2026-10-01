@@ -354,6 +354,7 @@ and a reply from an earlier section is discarded.  Unknown SECTION signals
                             (_ 'browse)))
       (etaf-weread--write app :filter (etaf-weread--shelf-filter section))
       (etaf-weread--write app :pane-scroll 0)
+      (etaf-weread--show-list-pane app)
       (setf (plist-get app :list-key) key)
       (etaf-weread--show-cached-list app key same-p))
     (if (eq section :index)
@@ -381,6 +382,7 @@ querying the backend."
         (etaf-weread--write app :title "搜索结果")
         (etaf-weread--write app :subtitle (format "关键词：%s" keyword))
         (etaf-weread--write app :pane-scroll 0)
+        (etaf-weread--show-list-pane app)
         (setf (plist-get app :list-key) key)
         (etaf-weread--show-cached-list app key same-p))
       (etaf-weread--load-list app key (etaf-weread--list-request app :search)
@@ -1210,6 +1212,15 @@ the wide layout, because it has no viewport to adapt to."
 (defun etaf-weread--compact-layout-p (app)
   "Return non-nil when APP shows one pane at a time."
   (not (eq (etaf-weread--read app :layout) 'wide)))
+
+(defun etaf-weread--show-list-pane (app)
+  "Bring APP's list pane back into view on a compact layout.
+Loading a section, a filter or a store search is a list operation, and a
+compact frame shows one pane at a time; it must leave the side pane it was
+showing.  A wide layout keeps every column, so its pane choice is kept."
+  (when (and (etaf-weread--compact-layout-p app)
+             (not (eq (etaf-weread--read app :pane) 'list)))
+    (etaf-weread--write app :pane 'list)))
 
 (defun etaf-weread--effective-pane (app)
   "Return the pane APP is actually showing.

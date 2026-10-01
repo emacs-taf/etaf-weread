@@ -117,6 +117,11 @@
       "purpose": "The wide status bar and the compact tab row each paint their binding hint whole, so no layout clips the summary off."
     },
     {
+      "name": "etaf-weread-tests-section-switches-return-to-the-list-on-compact",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Switching section or running a store search brings the list pane back on a compact frame, while a wide frame keeps the pane the reader was showing."
+    },
+    {
       "name": "etaf-weread-tests-replaced-keys-run-the-reader-command",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Keys the renderer also binds (n, q, PageUp/PageDown) run the reader command instead of a renderer scroll, so the documented keyboard contract holds."
