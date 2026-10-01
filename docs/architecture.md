@@ -17,6 +17,12 @@ A window change adapts the layout through the model, and ETAF refits the canvas
 of every mounted runtime once a resize settles; the reader holds no direct Ebox
 or ECSS reference.
 
+The layout breakpoints are derived, not chosen: the wide threshold is the
+sidebar plus the pane plus the columns a full book row needs, so a frame can
+never show three columns the list cannot render in (below it the medium layout
+keeps a glyph rail and one pane at a time).  `etaf-weread--list-min-columns`
+records how many columns a full row spends outside its title.
+
 Every row of the canvas must stay exactly one line height.  The model budgets
 the page from the window's height in lines (`etaf-weread--page-size-for`), so a
 row carrying a larger `:font-size` makes the canvas taller in pixels than the
