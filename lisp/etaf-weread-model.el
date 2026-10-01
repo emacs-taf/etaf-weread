@@ -129,6 +129,9 @@ passed over, so browsing stays cheap on the network."
 (defconst etaf-weread--reader-gutter 3
   "Columns between two reading columns shown side by side.")
 
+(defconst etaf-weread--reader-max-columns 4
+  "Most reading columns a pane shows side by side, however wide it is.")
+
 (defcustom etaf-weread-reading-measure 44
   "Width in columns of one local reading column.
 A local chapter is wrapped to this many columns and the column is centered in
@@ -137,11 +140,14 @@ adjust it while reading and the choice is stored in `etaf-weread-settings-file'.
   :type 'integer
   :group 'etaf-weread)
 
-(defcustom etaf-weread-reading-spread 2
-  "Reading columns shown side by side, 1 or 2.
-Two columns use a wide frame instead of leaving it empty, and a frame too
-narrow for both falls back to one; the reader's `m' key toggles the choice."
-  :type '(choice (const :tag "One column" 1) (const :tag "Two columns" 2))
+(defcustom etaf-weread-reading-spread 'auto
+  "Reading columns shown side by side, or `auto' for as many as fit.
+`auto' (the default) shows as many columns of `etaf-weread-reading-measure'
+as the pane can hold, up to `etaf-weread--reader-max-columns'; a number pins
+the count, and a frame too narrow for it falls back to what fits.  The
+reader's `m' key cycles the choice and it is stored in
+`etaf-weread-settings-file'."
+  :type '(choice (const :tag "As many as fit" auto) (integer 1 4))
   :group 'etaf-weread)
 
 (defcustom etaf-weread-settings-file
@@ -205,9 +211,11 @@ other Lisp callers."
          (settings (etaf-weread--settings-read))
          (measure (or (plist-get settings :reader-measure)
                       etaf-weread-reading-measure))
-         (spread (if (memq (plist-get settings :reader-spread) '(1 2))
-                     (plist-get settings :reader-spread)
-                   etaf-weread-reading-spread)))
+         (spread (let ((stored (plist-get settings :reader-spread)))
+                   (if (or (eq stored 'auto)
+                           (and (integerp stored) (<= 1 stored 4)))
+                       stored
+                     etaf-weread-reading-spread))))
     (when (memq (plist-get settings :theme) '(dark light sepia))
       (setq etaf-weread-theme-mode (plist-get settings :theme)))
     (list :client client
@@ -237,6 +245,7 @@ other Lisp callers."
           :pane (etaf-ref 'list :name 'etaf-weread-pane)
           :pane-scroll (etaf-ref 0 :name 'etaf-weread-pane-scroll)
           :pane-rows (etaf-ref 10 :name 'etaf-weread-pane-rows)
+          :reader-rows (etaf-ref 12 :name 'etaf-weread-reader-rows)
           :pane-total (etaf-ref 0 :name 'etaf-weread-pane-total)
           :local (etaf-ref nil :name 'etaf-weread-local)
           :reader-lines (etaf-ref nil :name 'etaf-weread-reader-lines)
@@ -246,6 +255,7 @@ other Lisp callers."
           :reader-wrapped (etaf-ref 0 :name 'etaf-weread-reader-wrapped)
           :reader-spread (etaf-ref spread :name 'etaf-weread-reader-spread)
           :reader-shown (etaf-ref 1 :name 'etaf-weread-reader-shown)
+          :reader-capacity (etaf-ref 0 :name 'etaf-weread-reader-capacity)
           :reader-progress (etaf-ref 0 :name 'etaf-weread-reader-progress)
           :zen (etaf-ref nil :name 'etaf-weread-zen)
           :detail (etaf-ref nil :name 'etaf-weread-detail)
@@ -626,15 +636,21 @@ so every line still fits, and the choice is stored for the next session."
       columns)))
 
 (defun etaf-weread-toggle-reading-spread (app)
-  "Show one or two reading columns side by side in APP and return the choice.
-Two columns use a wide frame instead of leaving it empty; a frame too narrow
-for both keeps showing one.  The choice is stored for the next session, and
-the session state's `:reader-shown' reports what is actually on screen."
-  (let ((choice (if (= (etaf-weread--read app :reader-spread) 2) 1 2)))
+  "Show the next reading column count in APP and return the choice.
+The order is automatic, then one column, two and so on up to what the pane can
+hold, and back to automatic; the session state's `:reader-shown' reports what
+is actually on screen.  The choice is stored for the next session."
+  (let* ((fit (etaf-weread--reader-fit (etaf-weread--read app :reader-capacity)
+                                       (etaf-weread--read app :reader-columns)))
+         (feasible (cons 'auto (number-sequence 1 fit)))
+         (current (etaf-weread--read app :reader-spread))
+         (index (or (cl-position current feasible :test #'equal) 0))
+         (choice (or (nth (1+ index) feasible) 'auto)))
     (etaf-weread--write app :reader-spread choice)
     (etaf-weread--sync-layout app)
     (etaf-weread--settings-write app)
-    (etaf-weread--note app (format "阅读栏数：%d"
+    (etaf-weread--note app (format "阅读栏数：%s（当前 %d 栏）"
+                                   (if (eq choice 'auto) "自动" choice)
                                    (etaf-weread--read app :reader-shown)))
     choice))
 
@@ -1201,7 +1217,9 @@ single pane.  Opening the notes loads them when they are not cached yet."
   "Return how many rows one page of APP's side pane holds.
 The reading pane shows one row per line per column, so a two-column spread
 advances twice as far as a single column when paging."
-  (let ((rows (max 1 (etaf-weread--read app :pane-rows))))
+  (let ((rows (if (eq (etaf-weread--effective-pane app) 'reader)
+                  (max 1 (etaf-weread--read app :reader-rows))
+                (max 1 (etaf-weread--read app :pane-rows)))))
     (if (eq (etaf-weread--effective-pane app) 'reader)
         (* rows (max 1 (etaf-weread--read app :reader-shown)))
       rows)))
@@ -1492,13 +1510,26 @@ a shorter heading.  A compact layout gives the pane the full body height."
                    (_ 14))))
     (max 3 (- height chrome))))
 
+(defun etaf-weread--reader-rows-for (window layout zen)
+  "Return how many text rows one reading column holds in WINDOW.
+The reading view spends a row each on its top padding, the running head and a
+blank separator, plus the footer (two rows on a compact layout) and the
+frame's own bottom padding, and one row stays free below the text.  A zen
+frame hides the head and the footer, so only the padding and the free row
+remain."
+  (let* ((height (if (and window (window-live-p window))
+                     (window-body-height window)
+                   (frame-height)))
+         (chrome (if zen 3 (+ 5 (if (eq layout 'wide) 1 2)))))
+    (max 3 (- height chrome))))
+
 (defun etaf-weread--window-columns (&optional window)
   "Return WINDOW's body width in columns, or the frame width when it is dead."
   (if (and window (window-live-p window))
       (window-body-width window)
     (frame-width)))
 
-(defun etaf-weread--reader-capacity (app window layout)
+(defun etaf-weread--reader-capacity-for (app window layout)
   "Return the columns the reading pane can give its text in WINDOW.
 A zen frame keeps the whole body for the reader; otherwise the section sidebar
 or rail keeps its own columns, and two columns stay clear of the pane's
@@ -1519,6 +1550,21 @@ when the frame is narrower than the chosen measure."
        (min (etaf-weread--read app :reader-measure)
             (or (etaf-weread--read app :reader-columns)
                 etaf-weread-reading-measure))))
+
+(defun etaf-weread--reader-fit (capacity columns)
+  "Return how many COLUMNS-wide reading columns fit CAPACITY columns.
+The gutter between columns is part of the pitch, and the result stays inside
+one and `etaf-weread--reader-max-columns'."
+  (let ((pitch (+ (max 1 columns) etaf-weread--reader-gutter)))
+    (max 1 (min etaf-weread--reader-max-columns
+                (/ (+ capacity etaf-weread--reader-gutter) pitch)))))
+
+(defun etaf-weread--reader-shown (app capacity columns)
+  "Return how many reading columns APP shows for CAPACITY and COLUMNS.
+An automatic spread uses everything that fits; a pinned one never exceeds it."
+  (let ((fit (etaf-weread--reader-fit capacity columns))
+        (choice (etaf-weread--read app :reader-spread)))
+    (if (integerp choice) (min choice fit) fit)))
 
 (defun etaf-weread--rewrap-local-chapter (app)
   "Wrap APP's open local chapter again when the reading width changed.
@@ -1559,16 +1605,17 @@ changes."
                      (etaf-weread--layout-for (etaf-weread--window-columns window))
                    'wide))
          (size (etaf-weread--page-size-for window layout))
-         (capacity (etaf-weread--reader-capacity app window layout))
+         (capacity (etaf-weread--reader-capacity-for app window layout))
          (columns (min (etaf-weread--read app :reader-measure) capacity))
-         (shown (if (and (= (etaf-weread--read app :reader-spread) 2)
-                         (>= capacity (+ (* 2 columns) etaf-weread--reader-gutter)))
-                    2
-                  1)))
+         (shown (etaf-weread--reader-shown app capacity columns)))
     (etaf-batch
       (etaf-weread--write app :layout layout)
       (etaf-weread--write app :page-size size)
       (etaf-weread--write app :pane-rows (etaf-weread--pane-rows-for window layout))
+      (etaf-weread--write app :reader-rows
+                          (etaf-weread--reader-rows-for
+                           window layout (etaf-weread--read app :zen)))
+      (etaf-weread--write app :reader-capacity capacity)
       (etaf-weread--write app :reader-columns columns)
       (etaf-weread--write app :reader-shown shown)
       (etaf-weread--clamp-list-position app)
@@ -1781,8 +1828,10 @@ on), `:notes', `:stats', `:account',
           :reader-title (etaf-weread--read app :reader-title)
           :reader-measure (etaf-weread--read app :reader-measure)
           :reader-columns (etaf-weread--read app :reader-columns)
+          :reader-rows (etaf-weread--read app :reader-rows)
           :reader-spread (etaf-weread--read app :reader-spread)
           :reader-shown (etaf-weread--read app :reader-shown)
+          :reader-capacity (etaf-weread--read app :reader-capacity)
           :reader-progress (etaf-weread--read app :reader-progress)
           :zen (etaf-weread--read app :zen)
           :notes (and notes (copy-sequence notes))

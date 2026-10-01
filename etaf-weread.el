@@ -81,8 +81,9 @@
 ;; `:pane-scroll', `:pane-total', `:detail', `:local' (the open local book),
 ;; `:reader-lines' (its wrapped chapter text), `:reader-title',
 ;; `:reader-measure' (the chosen column width), `:reader-columns' (the width
-;; the open chapter is wrapped to), `:reader-progress' (percent read), `:zen',
-;; `:notes', `:stats', `:account',
+;; the open chapter is wrapped to), `:reader-rows' (one column's height),
+;; `:reader-spread', `:reader-shown' (the columns on screen), `:reader-progress'
+;; (percent read), `:zen', `:notes', `:stats', `:account',
 ;; `:summary', `:index-query', `:index-syncing', `:theme', `:loading',
 ;; `:error', `:message' and `:viewport-width' (the pixel canvas the reader
 ;; mounts into).  The snapshot copies every value, so mutating it never changes
@@ -237,10 +238,11 @@
 ;; keys adjust it and the choice is stored in `etaf-weread-settings-file'.
 ;;
 ;; Variable: etaf-weread-reading-spread
-;; Reading columns shown side by side, 1 or 2, default 2.
-;; Two columns use a wide frame instead of leaving it empty and a frame too
-;; narrow for both falls back to one, which the session state's `:reader-shown'
-;; reports.  The reader's `m' key toggles the choice and it is stored in
+;; Reading columns shown side by side, `auto' (the default) or 1 to 4.
+;; `auto' shows as many columns of `etaf-weread-reading-measure' as the pane
+;; can hold, up to four, and a pinned count falls back to what fits when the
+;; frame cannot hold it; the session state's `:reader-shown' reports what is on
+;; screen.  The reader's `m' key cycles the choice and it is stored in
 ;; `etaf-weread-settings-file'.
 ;;
 ;; Variable: etaf-weread-settings-file
@@ -305,11 +307,10 @@
 ;;
 ;; Function: etaf-weread-toggle-reading-spread (app)
 ;;;###autoload (autoload 'etaf-weread-toggle-reading-spread "etaf-weread" nil t)
-;; Show one or two reading columns side by side in APP and return the choice.
-;; Two columns use a wide frame instead of leaving it empty, and the frame's
-;; own width decides whether both fit; `:reader-shown' in the session state
-;; reports what is on screen.  The choice is stored in
-;; `etaf-weread-settings-file'.
+;; Show the next reading column count in APP and return the choice.
+;; The order is `auto', then one column, two and so on up to what the pane can
+;; hold, and back to `auto'; `:reader-shown' in the session state reports what
+;; is on screen.  The choice is stored in `etaf-weread-settings-file'.
 ;;
 ;; Function: etaf-weread-cycle-theme (app)
 ;;;###autoload (autoload 'etaf-weread-cycle-theme "etaf-weread" nil t)

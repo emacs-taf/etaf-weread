@@ -644,7 +644,7 @@ the session's timers and pending backend requests."
          :progress (etaf-weread--read session :reader-progress)
          :columns (etaf-weread--read session :reader-columns)
          :spread (etaf-weread--read session :reader-shown)
-         :rows (etaf-weread--read session :pane-rows)
+         :rows (etaf-weread--read session :reader-rows)
          :lines (etaf-weread--pane-lines session))
         (etaf-weread--view-notes
          :if (and (not (eq (etaf-weread--read session :mode) 'stats))

@@ -883,7 +883,12 @@ because it carries the chapter heading."
                          (buffer-substring-no-properties (point-min) (point-max))))))
             ;; One column is a key away, and the choice survives the session.
             (should (= 1 (etaf-weread-toggle-reading-spread app)))
-            (should (= 1 (plist-get (etaf-weread-state app) :reader-shown))))
+            (should (= 1 (plist-get (etaf-weread-state app) :reader-shown)))
+            (should (= 2 (etaf-weread-toggle-reading-spread app)))
+            (should (= 2 (plist-get (etaf-weread-state app) :reader-shown)))
+            ;; The cycle returns to automatic and stays there.
+            (should (eq 'auto (etaf-weread-toggle-reading-spread app)))
+            (should (= 2 (plist-get (etaf-weread-state app) :reader-shown))))
         (kill-buffer buffer)))))
 
 (ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()

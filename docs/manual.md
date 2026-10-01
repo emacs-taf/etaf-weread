@@ -13,7 +13,7 @@
 | `RET` in `本地书` | open the selected local book's first chapter |
 | `f` | reading-only layout: the open chapter owns the frame |
 | `[` / `]` | narrow or widen the reading column (more or less inset) |
-| `m` | show one or two reading columns side by side |
+| `m` | cycle reading columns: automatic, 1, 2 … as many as fit |
 | `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
 | `g` / `G` | top / end of the open chapter |
 | `c` | jump to a chapter of the open local book |
@@ -42,8 +42,9 @@ file into chapters and starts reading:
 - the text is wrapped to `etaf-weread-reading-measure` columns and the column
   is centered, so a wide frame stays readable; `[` and `]` adjust the width
   while reading and the choice is remembered;
-- a frame wide enough for two columns shows them side by side, `m` switches
-  between one and two, and the choice is remembered as well;
+- a frame wide enough for more than one column shows as many as the pane
+  holds (up to four) side by side; `m` cycles automatic, one column, two and
+  so on, and the choice is remembered as well;
 - Chinese paragraphs start with the two-character indent while the chapter
   heading stays flush, and the running head reports how far the book is read;
 - `j`/`k` (also the arrows and the wheel) scroll line by line, `C-v`/`M-v` and
