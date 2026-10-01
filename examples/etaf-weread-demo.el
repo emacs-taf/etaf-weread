@@ -29,7 +29,23 @@
              :category "科学技术-科学科普" :progress 0 :readingTime 0)
     (:bookId "4" :title "禅与摩托车维修艺术" :author "罗伯特·M.波西格"
              :category "文学-外国文学" :progress 100 :readingTime 12840
-             :finished t))
+             :finished t)
+    (:bookId "5" :title "费曼物理学讲义" :author "理查德·费曼"
+             :category "科学技术-物理" :progress 28 :readingTime 5400)
+    (:bookId "6" :title "红楼梦" :author "曹雪芹"
+             :category "文学-古典文学" :progress 7 :readingTime 2600)
+    (:bookId "7" :title "置身事内" :author "兰小欢"
+             :category "经济理财-经济" :progress 63 :readingTime 7200)
+    (:bookId "8" :title "人类简史" :author "尤瓦尔·赫拉利"
+             :category "历史-世界史" :progress 88 :readingTime 9900)
+    (:bookId "9" :title "代码整洁之道" :author "罗伯特·C.马丁"
+             :category "计算机-软件工程" :progress 45 :readingTime 4800)
+    (:bookId "10" :title "非暴力沟通" :author "马歇尔·卢森堡"
+             :category "心理-沟通" :progress 21 :readingTime 3100)
+    (:bookId "11" :title "毛姆短篇小说全集" :author "毛姆"
+             :category "文学-外国文学" :progress 52 :readingTime 6600)
+    (:bookId "12" :title "中国美术史" :author "李霖灿"
+             :category "艺术-美术" :progress 0 :readingTime 0))
   "Shelf the scripted demo account reports.")
 
 (defconst etaf-weread-demo--chapters

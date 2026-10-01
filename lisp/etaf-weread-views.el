@@ -146,11 +146,12 @@ called with INDEX when the row is clicked."
     (box :height '(lh 1) :justify-self 'end :font-weight 'normal
          :color (etaf-weread-color :dim)
       (text (expr (or (plist-get row :right) ""))))
-    (box :height '(lh 1) :justify-self 'end :font-weight 'normal
-         :color (if (plist-get row :finished)
-                    (etaf-weread-color :ok)
-                  (etaf-weread-color :gold))
-      (text (expr (or (plist-get row :badge) ""))))))
+    (box :height '(lh 1) :justify-self 'end
+      (etaf-badge :if (not (string-empty-p (or (plist-get row :badge) "")))
+                  :text (plist-get row :badge)
+                  :variant (cond ((plist-get row :finished) 'success)
+                                 ((plist-get row :rating) 'warning)
+                                 (t 'neutral))))))
 
 (etaf-define-component etaf-weread--view-hi-row
     (&key index row selected press)
@@ -240,6 +241,7 @@ COMPACT renders the glyph-only rail a medium layout has room for."
   (flex :flex-direction 'column
         :width (if compact etaf-weread--rail-width etaf-weread--sidebar-width)
         :height 'stretch
+        :flex-shrink 0
         :padding '((lh 1) (ch 1)) :gap '((lh 0) (ch 0))
         :background-color (etaf-weread-color :panel)
         :border-right (etaf-weread--view-border 'right (etaf-weread-color :line))
@@ -333,51 +335,33 @@ needs.  MODE `stats' hides the search field, which has no meaning there."
                    :on-press on-refresh))))
 
 (etaf-define-component etaf-weread--view-tabs (&key pane on-pane)
-  "Render the list/detail/notes switch a compact layout uses."
+  "Render the list/detail/notes switch a compact layout uses.
+The switch itself is the shared Tabs control; this Component only places it
+with the reader's hint line."
   :view
   (flex :width 'stretch :height '(lh 2) :gap '((lh 0) (ch 2))
         :flex-shrink 0 :align-items 'center :padding '((lh 0) (ch 2))
         :background-color (etaf-weread-color :panel)
         :border-top (etaf-weread--view-border 'top (etaf-weread-color :line))
-    (flex :for (tab (list (list 'list "列表")
-                          (list 'detail "详情")
-                          (list 'notes "笔记")))
-      :key (car tab)
-      :height '(lh 1) :gap '((lh 0) (ch 1)) :align-items 'center
-      :padding '((lh 0) (ch 1)) :role 'button :tab-index 0
-      :pointer (etaf-weread--item-pointer)
-      :hover-style (etaf-weread--hover-surface)
-      :help-echo (nth 1 tab)
-      :background-color (and (eq (car tab) pane) (etaf-weread-color :accent-soft))
-      :color (if (eq (car tab) pane) (etaf-weread-color :accent) (etaf-weread-color :muted))
-      :font-weight (if (eq (car tab) pane) 'bold 'normal)
-      :on-press (lambda () (funcall on-pane (car tab)))
-      (box :height '(lh 1)
-        (text (expr (nth 1 tab)))))
+    (box :width '(ch 22)
+      (etaf-tabs :items (list (list :key 'list :label "列表")
+                              (list :key 'detail :label "详情")
+                              (list :key 'notes :label "笔记"))
+                 :active pane
+                 :on-change (lambda (key) (funcall on-pane key))))
     (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
          :height '(lh 1) :text-align 'right :color (etaf-weread-color :dim)
- :overflow 'hidden
+         :overflow 'hidden
       (text (expr "j/k 选择 · RET 打开 · v 切换面板")))))
 
-(etaf-define-component etaf-weread--view-meter (&key ratio color)
-  "Render a thin two-color meter filled to RATIO."
+(etaf-define-component etaf-weread--view-note (&key text loading height)
+  "Render TEXT as a quiet placeholder, or a skeleton while LOADING.
+Composes the shared empty-state and skeleton controls so a placeholder keeps
+the catalog's spacing and typography."
   :view
-  (flex :width 'stretch :height '(lh 1) :align-items 'center
-        :gap '((lh 0) (px 0))
-    (box :height '(% 40)
-         :width (list '% (* 100.0 (max 0.001 (min 1.0 (or ratio 0)))))
-         :flex-shrink 0 :min-width '(px 1)
-         :bgcolor (or color (etaf-weread-color :meter)))
-    (box :height '(% 40) :flex-grow 1
-         :flex-basis 'auto :min-width '(px 0)
-         :bgcolor (etaf-weread-color :panel3))))
-
-(etaf-define-component etaf-weread--view-note (&key text height)
-  "Render TEXT as a quiet placeholder filling the content area."
-  :view
-  (box :width 'stretch :height (or height '(lh 6)) :text-align 'center
-       :color (etaf-weread-color :dim)
-    (text (expr (or text "")))))
+  (column :width 'stretch :item-gap '(lh 0)
+    (etaf-skeleton :if loading :width 'stretch :height (or height '(lh 6)))
+    (etaf-empty :if (not loading) :title (or text ""))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Book detail and highlights
@@ -394,8 +378,7 @@ actions the card offers."
           :padding '((lh 1) (ch 2))
     (etaf-weread--view-note
      :if (and detail (plist-get detail :loading))
-     :text (format "正在加载「%s」…" (or (plist-get detail :title) ""))
-     :height '(lh 8))
+     :loading t :height '(lh 8))
     (etaf-weread--view-note
      :if (and detail (plist-get detail :error))
      :text (format "加载失败：%s" (plist-get detail :error))
@@ -434,15 +417,8 @@ actions the card offers."
                                           (format "%s 字"
                                                   (plist-get detail :word-count)))))
                          " · "))))))
-      (flex :width 'stretch :height '(lh 1) :gap '((lh 0) (ch 1))
-            :align-items 'center
-        (etaf-weread--view-meter :ratio (/ (min 100 (or (plist-get detail :progress) 0))
-                                           100.0))
-        (box :width '(ch 5) :height '(lh 1) :text-align 'right
-             :color (etaf-weread-color :muted)
-          (text (expr (or (and (> (or (plist-get detail :progress) 0) 0)
-                               (etaf-weread--progress-text (plist-get detail :progress)))
-                          "未开始")))))
+      (etaf-progress :value (max 0 (min 100 (or (plist-get detail :progress) 0)))
+                     :max 100 :label "已读")
       (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :dim)
 
         (text (expr (string-join
@@ -468,18 +444,15 @@ actions the card offers."
       (flex :width 'stretch :height '(lh 2) :gap '((lh 0) (ch 2))
             :align-items 'center
             :border-bottom (etaf-weread--view-border 'bottom (etaf-weread-color :line))
-        (box :height '(lh 1) :font-weight (if (eq pane 'detail) 'bold 'normal)
-             :color (if (eq pane 'detail) (etaf-weread-color :accent)
-                      (etaf-weread-color :muted))
-             :role 'button :tab-index 0 :pointer (etaf-weread--item-pointer)
-             :help-echo "查看目录" :on-press (lambda () (funcall on-pane 'detail))
-          (text (expr (format "目录 %d" (length (plist-get detail :chapters))))))
-        (box :height '(lh 1) :font-weight (if (eq pane 'notes) 'bold 'normal)
-             :color (if (eq pane 'notes) (etaf-weread-color :accent)
-                      (etaf-weread-color :muted))
-             :role 'button :tab-index 0 :pointer (etaf-weread--item-pointer)
-             :help-echo "查看划线与想法" :on-press (lambda () (funcall on-pane 'notes))
-          (text (expr (format "笔记 %d" (or (plist-get detail :notes) 0))))))
+        (box :width '(ch 22)
+          (etaf-tabs :items (list (list :key 'detail
+                                        :label (format "目录 %d"
+                                                       (length (plist-get detail :chapters))))
+                                  (list :key 'notes
+                                        :label (format "笔记 %d"
+                                                       (or (plist-get detail :notes) 0))))
+                     :active pane
+                     :on-change (lambda (key) (funcall on-pane key)))))
       (column :width 'stretch :item-gap '(lh 0)
         (grid :for (chapter chapters) :key (plist-get chapter :index)
               :width 'stretch :height '(lh 1)
@@ -510,7 +483,7 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
           :padding '((lh 1) (ch 2))
     (etaf-weread--view-note
      :if (and notes (plist-get notes :loading))
-     :text "正在加载划线与想法…" :height '(lh 8))
+     :loading t :height '(lh 8))
     (etaf-weread--view-note
      :if (and notes (plist-get notes :error))
      :text (format "加载失败：%s" (plist-get notes :error)) :height '(lh 8))
@@ -532,18 +505,11 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
       (flex :width 'stretch :height '(lh 2) :gap '((lh 0) (ch 2))
             :align-items 'center
             :border-bottom (etaf-weread--view-border 'bottom (etaf-weread-color :line))
-        (box :height '(lh 1) :font-weight (if (eq pane 'detail) 'bold 'normal)
-             :color (if (eq pane 'detail) (etaf-weread-color :accent)
-                      (etaf-weread-color :muted))
-             :role 'button :tab-index 0 :pointer (etaf-weread--item-pointer)
-             :help-echo "查看目录" :on-press (lambda () (funcall on-pane 'detail))
-          (text "详情"))
-        (box :height '(lh 1) :font-weight (if (eq pane 'notes) 'bold 'normal)
-             :color (if (eq pane 'notes) (etaf-weread-color :accent)
-                      (etaf-weread-color :muted))
-             :role 'button :tab-index 0 :pointer (etaf-weread--item-pointer)
-             :help-echo "查看划线与想法" :on-press (lambda () (funcall on-pane 'notes))
-          (text "笔记"))
+        (box :width '(ch 12)
+          (etaf-tabs :items (list (list :key 'detail :label "详情")
+                                  (list :key 'notes :label "笔记"))
+                     :active pane
+                     :on-change (lambda (key) (funcall on-pane key))))
         (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0))
         (etaf-button :label "继续阅读" :variant 'ghost :pointer 'hand
                      :help-echo "在浏览器里打开这本书" :on-press on-open))
@@ -586,27 +552,22 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
   (flex :flex-direction 'column :width 'stretch :height 'stretch :gap '((lh 0) (ch 0))
         :padding '((lh 1) (ch 2))
     (etaf-weread--view-note
-     :if (null stats) :text "正在加载阅读统计…" :height '(lh 8))
-    (column :if stats :width 'stretch :item-gap '(lh 0)
+     :if (null stats) :loading t :height '(lh 8))
+    (flex :if stats :flex-direction 'column :width 'stretch :gap '((lh 0) (ch 0))
       (text :font-weight 'bold :font-size 16 "阅读统计")
       (box :height '(lh 1) :color (etaf-weread-color :muted)
         (text (expr (or (plist-get stats :conclusion) ""))))
       (box :height '(lh 1))
-      (flex :width 'stretch :height '(lh 4) :gap '((lh 0) (ch 1))
-        (column :for (card (list (list "读完" (format "%d" (or (plist-get stats :finished) 0)) "本")
-                                 (list "在读" (format "%d" (or (plist-get stats :reading) 0)) "本")
-                                 (list "时长" (or (plist-get stats :total-time) "—") "")
-                                 (list "笔记" (format "%d" (or (plist-get stats :notes) 0)) "条")))
+      (flex :width 'stretch :gap '((lh 0) (ch 1))
+        (column :for (card (list (list "读完" (format "%d 本" (or (plist-get stats :finished) 0)))
+                                 (list "在读" (format "%d 本" (or (plist-get stats :reading) 0)))
+                                 (list "时长" (or (plist-get stats :total-time) "—"))
+                                 (list "笔记" (format "%d 条" (or (plist-get stats :notes) 0)))))
                 :key (car card)
                 :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
-                :item-gap '(lh 0) :padding '((lh 0) (ch 1))
+                :padding '((lh 0) (ch 1))
                 :bgcolor (etaf-weread-color :panel2)
-          (box :height '(lh 2) :text-align 'center :font-weight 'bold
-               :font-size 20 :color (etaf-weread-color :accent)
-            (text (expr (format "%s" (nth 1 card)))))
-          (box :height '(lh 1) :text-align 'center
-               :color (etaf-weread-color :muted)
-            (text (expr (format "%s%s" (car card) (nth 2 card)))))))
+          (etaf-statistic :label (nth 0 card) :value (nth 1 card))))
       (box :height '(lh 2))
       (text :font-weight 'bold "读完的书")
       (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :muted)

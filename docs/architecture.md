@@ -13,8 +13,9 @@
 | `lisp/etaf-weread-app.el` | The `etaf-weread-app` Component, the buffer, the keymap and the reader commands. |
 
 Only the framework is used: the application never calls the renderer directly.
-A window change adapts the layout through the model and asks ETAF to refit the
-canvas (`etaf-refit`); the reader holds no direct Ebox or ECSS reference.
+A window change adapts the layout through the model, and ETAF refits the canvas
+of every mounted runtime once a resize settles; the reader holds no direct Ebox
+or ECSS reference.
 
 ## Data flow
 

@@ -109,7 +109,6 @@ other Lisp callers."
                       (etaf-weread-make-client)))))
     (list :client client
           :buffer nil
-          :mounted-width nil
           :disposed nil
           :started-at nil
           :follow-timer nil
@@ -1311,23 +1310,11 @@ publication costs, so apply once the drag settles instead of per event.")
           (run-at-time etaf-weread--resize-settle-delay nil
                        #'etaf-weread--window-size-change-apply))))
 
-(defun etaf-weread--settle-canvas (app window)
-  "Refit APP's canvas to WINDOW's settled size.
-A reader mounted before the window manager finished resizing its frame keeps
-the canvas it painted at mount.  ETAF's refit re-resolves the viewport through
-the framework, so the application never calls the renderer itself."
-  (let* ((buffer (plist-get app :buffer))
-         (runtime (and (buffer-live-p buffer) (etaf-runtime-for-buffer buffer))))
-    (when (and runtime (window-live-p window))
-      (condition-case nil
-          (progn
-            (etaf-refit runtime window)
-            (setf (plist-get app :mounted-width)
-                  (* (window-body-width window) (window-font-width window))))
-        (error nil)))))
-
 (defun etaf-weread--window-size-change-apply ()
-  "Adapt every mounted reader to its window's settled size."
+  "Adapt every mounted reader to its window's settled size.
+The canvas refit itself is the framework's job: ETAF refits every mounted
+runtime once a resize settles.  This only recomputes the reader layout, page
+size and pane budgets that belong to the application."
   (setq etaf-weread--resize-timer nil)
   (let ((frames (prog1 (nreverse etaf-weread--resize-frames)
                   (setq etaf-weread--resize-frames nil))))
@@ -1337,11 +1324,8 @@ the framework, so the application never calls the renderer itself."
           (let ((buffer (window-buffer window)))
             (when (and (buffer-live-p buffer)
                        (buffer-local-value 'etaf-weread--model buffer))
-              (let* ((model (buffer-local-value 'etaf-weread--model buffer))
-                     (layout (etaf-weread--read model :layout))
-                     (settled (etaf-weread--sync-layout model window)))
-                (unless (eq layout settled)
-                  (etaf-weread--settle-canvas model window))))))))))
+              (let ((model (buffer-local-value 'etaf-weread--model buffer)))
+                (etaf-weread--sync-layout model window)))))))))
 
 (defun etaf-weread--start (app)
   "Start APP: fit the layout and follow later window resizes.
@@ -1393,7 +1377,11 @@ The snapshot is a copy: mutating it never changes the reader.  Keys are
           :window-start (nth 1 page)
           :selection (etaf-weread--read app :selection)
           :page-size (etaf-weread--read app :page-size)
-          :viewport-width (plist-get app :mounted-width)
+          :viewport-width
+          (let ((runtime (and (buffer-live-p (plist-get app :buffer))
+                              (etaf-runtime-for-buffer (plist-get app :buffer)))))
+            (and runtime (etaf-runtime-mounted-p runtime)
+                 (car (etaf-runtime-viewport runtime))))
           :rows-total (length rows)
           :list-total (etaf-weread--read app :list-total)
           :layout (etaf-weread--read app :layout)

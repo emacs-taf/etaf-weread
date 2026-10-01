@@ -444,6 +444,20 @@ The second book carries an orphan thought, so grouping is observable."
             (let ((text (buffer-substring-no-properties (point-min) (point-max))))
               (should (string-match-p "详情节1" text))
               (should (string-match-p "划线" text))))
+          ;; The shared Progress, Tabs, Statistic and Empty controls must render
+          ;; in the panes that compose them.
+          (etaf-weread-show-book app "1" 'detail)
+          (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+          (with-current-buffer buffer
+            (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+              (should (string-match-p "已读" text))
+              (should (string-match-p "目录 2" text))))
+          (etaf-weread-locate app :stats)
+          (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+          (with-current-buffer buffer
+            (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+              (should (string-match-p "阅读统计" text))
+              (should (string-match-p "读完" text))))
           (kill-buffer buffer)
           (let ((again (get-buffer-create " *etaf-weread-tests-mount*")))
             (etaf-mount again (etaf-weread-view app)

@@ -448,6 +448,7 @@ the session's timers and pending backend requests."
       (flex :if (etaf-weread--pane-shown-p session)
             :flex-direction 'column :width etaf-weread--pane-width
             :flex-grow (if (etaf-weread--compact-layout-p session) 1 0)
+            :flex-shrink 0
             :flex-basis 'auto
             :min-width '(ch 0) :min-height '(lh 0)
             :background-color (etaf-weread-color :panel)
@@ -532,9 +533,6 @@ section, selection and loaded detail."
     ;; reader, so the first paint already fits it.  The reader adapts to later
     ;; resizes as well (see `etaf-weread--sync-layout').
     (etaf-weread--sync-layout model (selected-window))
-    (plist-put model :mounted-width
-               (plist-get (etaf-weread--viewport-options (selected-window))
-                          :viewport-width))
     (etaf-mount buffer (etaf-weread-view model)
                 (etaf-weread--viewport-options (selected-window)))
     (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
