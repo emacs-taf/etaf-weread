@@ -248,6 +248,21 @@
 ;; The list is what the mounted reader provides to the ETAF UI controls in its
 ;; subtree, so buttons, inputs and progress meters follow the same palette.
 ;;
+;; Function: etaf-weread-open-local-book (app path)
+;;;###autoload (autoload 'etaf-weread-open-local-book "etaf-weread" nil t)
+;; Open the local book at PATH in APP's reading pane and return its chapter
+;; count.  The file is read from disk, so no backend and no account is
+;; involved; an unreadable or unsupported file signals `etaf-weread-error'.
+;;
+;; Function: etaf-weread-read-chapter (app index)
+;;;###autoload (autoload 'etaf-weread-read-chapter "etaf-weread" nil t)
+;; Show chapter INDEX (counting from 1) of APP's opened local book.
+;; INDEX is clamped into range, a session without a local book does nothing,
+;; and the chapter text replaces the side pane's content.
+;;
+;; Variable: etaf-weread-library-directory
+;; Directory scanned for local books; see `etaf-weread-library-books'.
+;;
 ;; Function: etaf-weread-library-books (&optional directory)
 ;;;###autoload (autoload 'etaf-weread-library-books "etaf-weread" nil nil)
 ;; Return every local book under DIRECTORY as plists.
@@ -322,6 +337,7 @@
 (require 'etaf-weread-theme)
 (require 'etaf-weread-service)
 (require 'etaf-weread-index)
+(require 'etaf-weread-library)
 (require 'etaf-weread-model)
 (require 'etaf-weread-views)
 (require 'etaf-weread-app)

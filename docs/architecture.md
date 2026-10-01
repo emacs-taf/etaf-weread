@@ -36,6 +36,15 @@ glyph icons, leave symbols unbolded, and never use inline `:font-size` in a row.
 Validate with `etaf-weread-gui-check` in `scripts/weread-gui-probe.el`: canvas
 pixels must equal window pixels and no row may be taller.
 
+## Reading pane
+
+A local book needs no backend: the section scans
+`etaf-weread-library-directory`, and opening a file publishes its chapter text
+into the same side pane the card and the highlights use.  The model wraps the
+chapter to `etaf-weread--pane-content-columns` before publishing, so the pane
+counts and scrolls rows that are already the right width and no line is
+clipped; `<next>`/`<prior>` turn chapters while that pane is shown.
+
 ## Data flow
 
 ```text

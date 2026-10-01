@@ -100,11 +100,16 @@ line height the page budget counts, and both binding hints must arrive whole."
          (canvas (etaf-weread-gui-canvas-pixels))
          (text (with-current-buffer (get-buffer etaf-weread-buffer-name)
                  (buffer-substring-no-properties (point-min) (point-max))))
-         (hint (if (eq (plist-get (etaf-weread-gui--state) :layout) 'wide)
-                   "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"
-                 (if (eq (plist-get (etaf-weread-gui--state) :layout) 'narrow)
-                     "? 帮助"
-                   "j/k 选择 · RET 打开 · v 切换面板")))
+         (state (etaf-weread-gui--state))
+         (hints (cond
+                 ;; While a local chapter is open the reading pane carries its
+                 ;; own key hints instead of the list's.
+                 ((eq (plist-get state :pane) 'reader)
+                  (list "C-v/M-v · SPC 翻页" "<next> 翻章 · v 卡片"))
+                 ((eq (plist-get state :layout) 'wide)
+                  (list "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"))
+                 ((eq (plist-get state :layout) 'narrow) (list "? 帮助"))
+                 (t (list "j/k 选择 · RET 打开 · v 切换面板"))))
          (problems (delq nil
                          (list (unless (and window
                                             (<= (car canvas) (window-pixel-height window)))
@@ -112,8 +117,13 @@ line height the page budget counts, and both binding hints must arrive whole."
                                          (car canvas) (and window (window-pixel-height window))))
                                (unless (zerop (cdr canvas))
                                  (format "%s row(s) exceed the line height" (cdr canvas)))
-                               (unless (string-match-p (regexp-quote hint) text)
-                                 (format "hint %S is not painted whole" hint))))))
+                               (seq-find (lambda (hint)
+                                           (not (string-match-p (regexp-quote hint) text)))
+                                         hints)
+                               (unless (cl-every (lambda (hint)
+                                                   (string-match-p (regexp-quote hint) text))
+                                                 hints)
+                                 (format "hint not painted whole: %S" hints))))))
     problems))
 
 (provide 'weread-gui-probe)

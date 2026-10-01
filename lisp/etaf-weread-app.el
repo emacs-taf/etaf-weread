@@ -67,6 +67,7 @@
     (define-key map (kbd "s") #'etaf-weread--shelf)
     (define-key map (kbd "n") #'etaf-weread--notebook)
     (define-key map (kbd "i") #'etaf-weread--index-section)
+    (define-key map (kbd "l") #'etaf-weread--local-books)
     (define-key map (kbd "I") #'etaf-weread--build-index)
     (define-key map (kbd "t") #'etaf-weread--stats)
     (define-key map (kbd "/") #'etaf-weread--search)
@@ -149,9 +150,15 @@ an opened reader buffer.")
       (seq-subseq chapters scroll (min (length chapters) (+ scroll rows))))))
 
 (defun etaf-weread--pane-lines (model)
-  "Return the visible lines of MODEL's highlight pane."
-  (let* ((notes (etaf-weread--read model :notes))
-         (lines (etaf-weread--notes-lines (plist-get notes :groups)))
+  "Return the visible lines of MODEL's side pane.
+The highlight pane flattens its groups into line plists; the reading pane
+slices the already-wrapped chapter text.  Both share the pane's scroll and row
+budget, so the scroll clamps and the painted rows always agree."
+  (let* ((reader (eq (etaf-weread--effective-pane model) 'reader))
+         (lines (if reader
+                    (etaf-weread--read model :reader-lines)
+                  (etaf-weread--notes-lines
+                   (plist-get (etaf-weread--read model :notes) :groups))))
          (rows (max 1 (etaf-weread--read model :pane-rows)))
          (scroll (max 0 (min (etaf-weread--read model :pane-scroll)
                              (max 0 (- (length lines) rows))))))
@@ -246,14 +253,21 @@ COLUMNS describes the event window; LAYOUT and PANE describe the reader."
   (interactive)
   (let* ((model (etaf-weread--current-model))
          (state (etaf-weread-state model)))
-    (etaf-weread-move-selection model (or (plist-get state :page-size) 10))))
+    (if (eq (plist-get state :pane) 'reader)
+        ;; `etaf-weread-read-chapter' counts from 1; the state stores 0-based.
+        (etaf-weread-read-chapter
+         model (+ 2 (or (plist-get (plist-get state :local) :index) 0)))
+      (etaf-weread-move-selection model (or (plist-get state :page-size) 10)))))
 
 (defun etaf-weread--previous-page ()
   "Select one page further up the book list."
   (interactive)
   (let* ((model (etaf-weread--current-model))
          (state (etaf-weread-state model)))
-    (etaf-weread-move-selection model (- (or (plist-get state :page-size) 10)))))
+    (if (eq (plist-get state :pane) 'reader)
+        (etaf-weread-read-chapter
+         model (or (plist-get (plist-get state :local) :index) 0))
+      (etaf-weread-move-selection model (- (or (plist-get state :page-size) 10))))))
 
 (defun etaf-weread--activate ()
   "Open the Host at point, or the selected book's detail or highlights.
@@ -334,6 +348,11 @@ or highlight list."
   (interactive)
   (etaf-weread-locate (etaf-weread--current-model) :finished))
 
+(defun etaf-weread--local-books ()
+  "Show the local book library."
+  (interactive)
+  (etaf-weread-locate (etaf-weread--current-model) :local))
+
 (defun etaf-weread--notebook ()
   "Show the books with highlights and thoughts."
   (interactive)
@@ -393,7 +412,7 @@ default face shows the reader background there instead of the frame's."
    (concat "j/k 或滚轮选择 · 单击选中 · 双击/RET 打开 · v 详情/笔记 · o 浏览器阅读"
            " · E 导出笔记 · C-v/M-v 或 SPC 滚动目录/划下面板 · s 书架"
            " · 1/2/3 全部/在读/读完 · n 笔记本"
-           " · i 笔记检索 · I 建立本地索引 · t 统计 · / 搜索 · g 刷新"
+           " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
            " · T 深浅色 · q 关闭")))
 
 ;;; ---------------------------------------------------------------------------
@@ -512,6 +531,11 @@ the session's timers and pending backend requests."
          :on-open on-open-book
          :on-export on-export-notes
          :on-pane on-pane)
+        (etaf-weread--view-reader
+         :if (and (not (eq (etaf-weread--read session :mode) 'stats))
+                  (eq (etaf-weread--effective-pane session) 'reader))
+         :title (etaf-weread--read session :reader-title)
+         :lines (etaf-weread--pane-lines session))
         (etaf-weread--view-notes
          :if (and (not (eq (etaf-weread--read session :mode) 'stats))
                   (eq (etaf-weread--effective-pane session) 'notes))
@@ -521,7 +545,11 @@ the session's timers and pending backend requests."
          :on-pane on-pane
          :on-open on-open-book)))
     (etaf-weread--view-tabs
-     :if (etaf-weread--compact-layout-p session)
+     ;; The switch moves between the list, the card and the highlights; while a
+     ;; local chapter is open the reading pane owns the frame instead, and `v'
+     ;; leaves it for the card.
+     :if (and (etaf-weread--compact-layout-p session)
+              (memq (etaf-weread--read session :pane) '(list detail notes)))
      :pane (etaf-weread--read session :pane)
      :layout (etaf-weread--read session :layout)
      :on-pane on-pane)

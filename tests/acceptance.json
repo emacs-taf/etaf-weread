@@ -132,6 +132,11 @@
       "purpose": "A local directory lists TXT and EPUB books and parses them into backend-shaped chapters, so reading a book the person owns needs no backend."
     },
     {
+      "name": "etaf-weread-tests-local-book-reading",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "The local section lists books from a directory, opening one publishes its chapter text in the reading pane, and the chapter keys move through the book within the pane's scroll budget."
+    },
+    {
       "name": "etaf-weread-tests-pane-keys-scroll-the-pane",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "SPC and M-v scroll a long table-of-contents pane from the keyboard, which the wheel alone cannot do."

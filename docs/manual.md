@@ -10,9 +10,10 @@
 | `v` | switch the side pane between detail and highlights |
 | `C-v` / `M-v`, `SPC` / `S-SPC` | scroll the detail or highlight pane one page |
 | `d` / `P` | show the detail pane / the highlights of the selected book |
+| `RET` in `本地书` | open the selected local book's first chapter |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |
-| `s` `n` `i` `t` | shelf, notebook, local notes index, reading statistics |
+| `s` `n` `i` `t` `l` | shelf, notebook, local notes index, statistics, local books |
 | `1`–`7` | the sidebar sections in order |
 | `/` or `S` | search the WeChat Reading store |
 | `I` | index the notebook's highlights into the local database |
@@ -23,6 +24,22 @@
 
 In the local index section the search field filters the indexed highlights
 instead of the store, and `RET` opens the book of the selected highlight.
+
+## Reading a local book
+
+The `本地书` section lists every TXT, Markdown and EPUB file in
+`etaf-weread-library-directory` (default `~/ebooks`).  Opening one reads the
+file into chapters and shows the first chapter in the reading pane:
+
+- the pane is the book text, wrapped to the pane width so nothing is clipped;
+- `C-v`/`M-v` and `SPC`/`S-SPC` scroll the text, `<next>`/`<prior>` turn to the
+  next and previous chapter, and `v` leaves the text for the book card;
+- the reading head names the book, the chapter number and the chapter title,
+  and the file is read from disk, so the account and the backend stay
+  untouched.
+
+Only files the person already holds are read; a WeChat Reading title whose text
+lives behind the site's reader still opens in the browser with `o`.
 
 ## Sections
 

@@ -626,6 +626,52 @@ it into the same chapter shape a book reply uses."
           (should-not (etaf-weread-library-books (expand-file-name "missing" directory))))
       (delete-directory directory t))))
 
+(ert-deftest etaf-weread-tests-local-book-reading ()
+  "A local book opens in the reading pane and turns chapters.
+The section lists the directory, opening a book publishes its first chapter,
+the chapter keys move through the book and the pane scroll budget follows the
+wrapped text."
+  (setq etaf-weread-tests--requests nil)
+  (let* ((fixtures (expand-file-name "fixtures" etaf-weread-tests--directory))
+         (directory (make-temp-file "weread-reading-" t))
+         (etaf-weread-buffer-name " *etaf-weread-tests-reading*")
+         (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (let ((etaf-weread-library-directory directory))
+          (copy-file (expand-file-name "local-a.txt" fixtures)
+                     (expand-file-name "local-a.txt" directory) t)
+          (etaf-weread-locate app :local)
+          (should (= 1 (length (plist-get (etaf-weread-state app) :items))))
+          (should (equal "local-a" (plist-get (car (plist-get (etaf-weread-state app) :items)) :title)))
+          (let ((buffer (etaf-weread-open app)))
+            (should (= 3 (etaf-weread-open-local-book
+                          app (expand-file-name "local-a.txt" directory))))
+            (let ((state (etaf-weread-state app)))
+              (should (eq 'reader (plist-get state :pane)))
+              (should (= 0 (plist-get (plist-get state :local) :index)))
+              (should (string-match-p "第一章正文"
+                                      (mapconcat (lambda (line) (plist-get line :text))
+                                                 (plist-get state :reader-lines) " ")))
+              (should (= (length (plist-get state :reader-lines))
+                         (plist-get state :pane-total)))
+              (should (string-match-p "第 1/3 章" (plist-get state :reader-title))))
+            ;; A real key turns the chapter while the reading pane is shown.
+            (with-current-buffer buffer (execute-kbd-macro (kbd "<next>")))
+            (let ((state (etaf-weread-state app)))
+              (should (= 1 (plist-get (plist-get state :local) :index)))
+              (should (string-match-p "第二章正文"
+                                      (mapconcat (lambda (line) (plist-get line :text))
+                                                 (plist-get state :reader-lines) " "))))
+            (should (= 3 (etaf-weread-read-chapter app 3)))
+            (should (string-match-p "第三章正文"
+                                    (mapconcat (lambda (line) (plist-get line :text))
+                                               (plist-get (etaf-weread-state app) :reader-lines)
+                                               " ")))
+            ;; Clamping: an index past the end stays on the last chapter.
+            (should (= 3 (etaf-weread-read-chapter app 99)))
+            (kill-buffer buffer)))
+      (delete-directory directory t))))
+
 (ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()
   "SPC and M-v scroll a long detail pane from the keyboard.
 The wheel scrolls the pane under the pointer; without keys a keyboard-only

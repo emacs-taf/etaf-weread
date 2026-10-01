@@ -29,9 +29,14 @@
 
 (defcustom etaf-weread-library-directory (expand-file-name "~/ebooks")
   "Directory scanned for local books the reader can open.
-`etaf-weread-library-books' reads it one level deep; subdirectories are opened
-on demand only when a caller asks for them."
+The scan walks subdirectories (a library is usually grouped by subject), up to
+`etaf-weread-library-depth' levels."
   :type 'directory
+  :group 'etaf-weread)
+
+(defcustom etaf-weread-library-depth 4
+  "Directory levels `etaf-weread-library-books' walks below its root."
+  :type 'integer
   :group 'etaf-weread)
 
 (defcustom etaf-weread-library-extensions '("txt" "text" "md" "markdown" "epub")
@@ -64,23 +69,35 @@ on demand only when a caller asks for them."
      (replace-regexp-in-string "[[:space:]]*[([].*?[)\]]?[[:space:]]*$" ""
                                (replace-regexp-in-string "[_]+" " " base)))))
 
+(defun etaf-weread-library--files (directory depth)
+  "Return the book files under DIRECTORY, walking DEPTH levels deeper.
+Hidden directories are skipped so a version-control or cache directory cannot
+flood the library."
+  (let ((entries nil))
+    (dolist (path (ignore-errors (directory-files directory t "\\`[^.]" t)))
+      (cond
+       ((file-directory-p path)
+        (when (> depth 1)
+          (setq entries (nconc entries (etaf-weread-library--files path (1- depth))))))
+       ((etaf-weread-library--format path) (push path entries))))
+    entries))
+
 (defun etaf-weread-library-books (&optional directory)
   "Return every local book under DIRECTORY as plists.
 Each plist is (:path :title :author :format :size).  DIRECTORY defaults to
-`etaf-weread-library-directory'; a missing or unreadable directory returns nil."
+`etaf-weread-library-directory' and is walked up to
+`etaf-weread-library-depth' levels; a missing or unreadable directory returns
+nil."
   (let ((directory (or directory etaf-weread-library-directory)))
     (when (file-directory-p directory)
-      (sort (seq-filter
-             #'identity
-             (mapcar
-              (lambda (path)
-                (when (etaf-weread-library--format path)
-                  (list :path path
-                        :title (etaf-weread-library--title-for path)
-                        :author ""
-                        :format (etaf-weread-library--format path)
-                        :size (nth 7 (file-attributes path)))))
-              (directory-files directory t "\\`[^.]" t)))
+      (sort (mapcar
+             (lambda (path)
+               (list :path path
+                     :title (etaf-weread-library--title-for path)
+                     :author ""
+                     :format (etaf-weread-library--format path)
+                     :size (nth 7 (file-attributes path))))
+             (etaf-weread-library--files directory etaf-weread-library-depth))
             (lambda (a b) (string< (plist-get a :title) (plist-get b :title)))))))
 
 (defun etaf-weread-library--read-file (path)
@@ -157,16 +174,16 @@ paragraph break so a chapter stays readable in one pane."
 
 (defun etaf-weread-library--dom-text (node)
   "Return the plain text of DOM NODE.
-Block elements break lines, so paragraphs survive; the helper avoids the
-version-specific `dom-texts'/`dom-inner-text' split."
+Block elements break lines, so paragraphs survive.  Only `dom-children' is
+walked: a node's cdr also carries attribute conses, and those are not text."
   (cond
    ((stringp node) node)
    ((consp node)
-    (let ((block (memq (car node)
+    (let ((block (memq (dom-tag node)
                        '(p div h1 h2 h3 h4 h5 h6 li tr br blockquote section article)))
           (parts nil))
       (when block (push "\n" parts))
-      (dolist (child (cdr node)) (push (etaf-weread-library--dom-text child) parts))
+      (dolist (child (dom-children node)) (push (etaf-weread-library--dom-text child) parts))
       (when block (push "\n" parts))
       (apply #'concat (nreverse parts))))
    (t "")))

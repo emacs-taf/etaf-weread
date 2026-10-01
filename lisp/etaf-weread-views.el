@@ -36,11 +36,6 @@
 (defconst etaf-weread--pane-width (list 'ch etaf-weread--pane-columns)
   "Width of the book detail and highlight pane.")
 
-(defconst etaf-weread--pane-content-columns 36
-  "Text columns available inside the pane content box.
-`etaf-weread--pane-width' minus its border and padding, so line clipping in
-the pane views stays inside the painted surface.")
-
 (defconst etaf-weread--row-columns '((ch 3) (fr 1) (ch 14) (ch 13) (ch 7) (ch 8))
   "Grid columns of one book row: index, title, author, meter, time, badge.")
 
@@ -352,6 +347,31 @@ the full binding summary cannot share a phone-like line with the switch."
       (text (expr (if (eq layout 'narrow)
                        "? 帮助"
                      "j/k 选择 · RET 打开 · v 切换面板"))))))
+
+(etaf-define-component etaf-weread--view-reader
+    (&key title lines)
+  "Render one local chapter in the reading pane.
+TITLE is the running head (book, chapter number and chapter title); LINES is
+the visible slice of the chapter text, already wrapped to the pane width, so
+this Component never measures text and no line is clipped."
+  :view
+  (column :width 'stretch :height 'stretch :item-gap '(lh 0)
+          :padding '((lh 1) (ch 2))
+    (box :height '(lh 1) :overflow 'hidden :font-weight 'bold
+      (text (expr (or title ""))))
+    (box :height '(lh 1) :overflow 'hidden :color (etaf-weread-color :dim)
+      (text "C-v/M-v · SPC 翻页 · <next> 翻章 · v 卡片"))
+    (box :height '(lh 1))
+    (etaf-weread--view-note
+     :if (null lines)
+     :text "选择一本本地书并回车开始阅读"
+     :height '(lh 6))
+    (column :if lines :width 'stretch :item-gap '(lh 0)
+      ;; The key is the line index: body text repeats empty and blank lines,
+      ;; so the text itself cannot key the list.
+      (box :for (line lines) :key (plist-get line :key)
+           :height '(lh 1) :overflow 'hidden
+        (text (expr (or (plist-get line :text) "")))))))
 
 (etaf-define-component etaf-weread--view-note (&key text loading height)
   "Render TEXT as a quiet placeholder, or a skeleton while LOADING.

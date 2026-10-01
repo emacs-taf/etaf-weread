@@ -25,6 +25,7 @@
 (require 'etaf-weread-service)
 (require 'etaf-weread-index)
 (require 'etaf-weread-theme)
+(require 'etaf-weread-library)
 
 (defconst etaf-weread-sections
   '((书架
@@ -34,6 +35,8 @@
     (笔记
      (:notebook "笔记本" "记")
      (:index "笔记检索" "查"))
+    (本地
+     (:local "本地书" "本"))
     (发现
      (:search "搜索书城" "搜")
      (:stats "阅读统计" "计")))
@@ -42,7 +45,8 @@ Each group is (GROUP-NAME (SECTION LABEL GLYPH) ...); SECTION keys are accepted
 by `etaf-weread-locate'.")
 
 (defconst etaf-weread--section-subtitles
-  '((:shelf . "书架里的全部书")
+  '((:local . "本地文件里的书")
+    (:shelf . "书架里的全部书")
     (:reading . "最近在读的书")
     (:finished . "已经读完的书")
     (:notebook . "有划线和想法的书")
@@ -67,6 +71,11 @@ model created by `etaf-weread-create'."
 
 (defconst etaf-weread--pane-columns 46
   "Frame columns the side pane occupies, including its border and padding.")
+
+(defconst etaf-weread--pane-content-columns 36
+  "Usable text columns inside the side pane.
+The pane's frame width minus its border and padding; the reader wraps a local
+chapter to this width so no line is clipped.")
 
 (defconst etaf-weread--list-min-columns 70
   "Frame columns the book list needs to render one full row.
@@ -153,6 +162,9 @@ other Lisp callers."
           :pane-scroll (etaf-ref 0 :name 'etaf-weread-pane-scroll)
           :pane-rows (etaf-ref 10 :name 'etaf-weread-pane-rows)
           :pane-total (etaf-ref 0 :name 'etaf-weread-pane-total)
+          :local (etaf-ref nil :name 'etaf-weread-local)
+          :reader-lines (etaf-ref nil :name 'etaf-weread-reader-lines)
+          :reader-title (etaf-ref "" :name 'etaf-weread-reader-title)
           :detail (etaf-ref nil :name 'etaf-weread-detail)
           :notes (etaf-ref nil :name 'etaf-weread-notes)
           :stats (etaf-ref nil :name 'etaf-weread-stats)
@@ -376,14 +388,113 @@ and a reply from an earlier section is discarded.  Unknown SECTION signals
       (etaf-weread--show-list-pane app)
       (setf (plist-get app :list-key) key)
       (etaf-weread--show-cached-list app key same-p))
-    (if (eq section :index)
-        (etaf-weread--index-reload app)
+    (if (eq section :local)
+        (etaf-weread--show-local-books app)
+      (if (eq section :index)
+          (etaf-weread--index-reload app)
       (cond ((eq section :search)
              (when (not (string-empty-p (etaf-weread--read app :query)))
                (etaf-weread--load-list app key (etaf-weread--list-request app section)
                                        same-p)))
-            (t (etaf-weread--load-list app key (etaf-weread--list-request app section)
-                                       same-p))))))
+              (t (etaf-weread--load-list app key (etaf-weread--list-request app section)
+                                         same-p)))))))
+
+(defun etaf-weread--show-local-books (app)
+  "Fill APP's list with the books under `etaf-weread-library-directory'.
+A local book needs no backend, so the rows appear synchronously."
+  (let* ((directory etaf-weread-library-directory)
+         (books (etaf-weread-library-books directory))
+         (rows (mapcar (lambda (book)
+                         (list :id (plist-get book :path)
+                               :title (plist-get book :title)
+                               :author (or (plist-get book :author) "")
+                               :badge (upcase (or (plist-get book :format) ""))
+                               :local t
+                               :progress 0))
+                       books)))
+    (etaf-batch
+      (etaf-weread--write app :rows rows)
+      (etaf-weread--write app :loading nil)
+      (etaf-weread--write app :list-total (length rows))
+      (etaf-weread--write app :selection 0)
+      (etaf-weread--write app :window-start 0)
+      (etaf-weread--write app :summary (format "本地书 %d 本" (length rows))))
+    (etaf-weread--note
+     app (if (file-directory-p directory)
+             (format "本地书库：%s（%d 本）" directory (length rows))
+           (format "本地书库目录不存在：%s" directory)))))
+
+(defun etaf-weread--wrap-text (text columns)
+  "Return TEXT as lines no wider than COLUMNS display columns.
+Explicit line breaks are kept, so a poem stays as the file wrote it; a long
+line is folded between characters, counting CJK as two columns."
+  (let ((lines nil))
+    (dolist (line (split-string (replace-regexp-in-string "\t" "    " text) "\n"))
+      (let ((current "") (width 0))
+        (dolist (char (string-to-list line))
+          (let ((char-width (char-width char)))
+            (when (and (> (+ width char-width) columns)
+                       (not (string-empty-p current)))
+              (push (string-trim-right current) lines)
+              (setq current "" width 0))
+            (setq current (concat current (char-to-string char))
+                  width (+ width char-width))))
+        (push (string-trim-right current) lines)))
+    (nreverse lines)))
+
+(defun etaf-weread--publish-local-chapter (app)
+  "Publish APP's current local chapter into the reading pane."
+  (let* ((local (etaf-weread--read app :local))
+         (chapters (plist-get local :chapters))
+         (index (or (plist-get local :index) 0))
+         (chapter (nth index chapters))
+         (text (or (plist-get chapter :text) "")))
+    (etaf-batch
+      (etaf-weread--write app :reader-lines
+                          (cl-loop for line in (etaf-weread--wrap-text
+                                                text etaf-weread--pane-content-columns)
+                                   for index from 1
+                                   collect (list :key index :text line)))
+      (etaf-weread--write app :reader-title
+                          (format "%s · 第 %d/%d 章 · %s"
+                                  (or (plist-get local :title) "")
+                                  (1+ index) (length chapters)
+                                  (or (plist-get chapter :title) "")))
+      (etaf-weread--write app :pane 'reader)
+      (etaf-weread--sync-pane-total app))
+    (etaf-weread--note app (or (plist-get local :title) "本地书"))))
+
+(defun etaf-weread-open-local-book (app path)
+  "Open the local book at PATH in APP's reading pane.
+Return the number of chapters the book has.  An unreadable or unsupported file
+signals `etaf-weread-error'."
+  (let* ((content (etaf-weread-library-content path))
+         (chapters (plist-get content :chapters)))
+    (etaf-batch
+      (etaf-weread--write app :local
+                          (list :path path
+                                :title (plist-get content :title)
+                                :format (plist-get content :format)
+                                :chapters chapters
+                                :index 0))
+      (etaf-weread--write app :pane-scroll 0))
+    (etaf-weread--publish-local-chapter app)
+    (length chapters)))
+
+(defun etaf-weread-read-chapter (app index)
+  "Show chapter INDEX (counting from 1) of APP's opened local book.
+INDEX is clamped into range and a session without a local book does nothing.
+Return the chapter index actually shown."
+  (let* ((local (etaf-weread--read app :local))
+         (chapters (plist-get local :chapters)))
+    (when chapters
+      (let ((next (max 0 (min (1- (length chapters)) (1- (max 1 index))))))
+        (etaf-batch
+          (setf (plist-get local :index) next)
+          (etaf-weread--write app :local local)
+          (etaf-weread--write app :pane-scroll 0))
+        (etaf-weread--publish-local-chapter app)
+        (1+ next)))))
 
 (defun etaf-weread-search (app keyword)
   "Search the WeChat Reading store for KEYWORD and show the matches.
@@ -871,12 +982,14 @@ In the notebook section the highlight pane opens; elsewhere the detail pane
 opens.  An indexed highlight row opens the highlights of its book.  An empty
 list does nothing."
   (when-let* ((row (etaf-weread--selected-row app)))
-    (if (eq (plist-get row :kind) :highlight)
-        (etaf-weread-show-book app (plist-get row :book) 'notes)
-      (let ((pane (if (eq (etaf-weread--read app :section) :notebook)
-                      'notes
-                    'detail)))
-        (etaf-weread-show-book app row pane)))))
+    (if (plist-get row :local)
+        (etaf-weread-open-local-book app (plist-get row :id))
+      (if (eq (plist-get row :kind) :highlight)
+          (etaf-weread-show-book app (plist-get row :book) 'notes)
+        (let ((pane (if (eq (plist-get (etaf-weread-state app) :section) :notebook)
+                        'notes
+                      'detail)))
+          (etaf-weread-show-book app row pane))))))
 
 (defun etaf-weread-press-row (app index)
   "Press list row INDEX (counting from 1) in APP.
@@ -1262,9 +1375,10 @@ the detail pane; a compact layout shows exactly the recorded pane."
 
 (defun etaf-weread--sync-pane-total (app)
   "Recompute the scrollable rows of APP's side pane."
-  (let ((total (if (eq (etaf-weread--effective-pane app) 'notes)
-                   (etaf-weread--notes-total app)
-                 (etaf-weread--detail-total app))))
+  (let ((total (pcase (etaf-weread--effective-pane app)
+                 ('reader (length (etaf-weread--read app :reader-lines)))
+                 ('notes (etaf-weread--notes-total app))
+                 (_ (etaf-weread--detail-total app)))))
     (etaf-weread--write app :pane-total total)
     (etaf-weread--write app :pane-scroll
                         (max 0 (min (etaf-weread--read app :pane-scroll)
@@ -1388,7 +1502,9 @@ The snapshot is a copy: mutating it never changes the reader.  Keys are
 (the loaded rows), `:visible' (the rows on the current page), `:selection',
 `:window-start', `:page-size', `:rows-total' (loaded count), `:list-total'
 (backend total or the loaded count), `:layout', `:pane', `:pane-rows',
-`:pane-scroll', `:pane-total', `:detail', `:notes', `:stats', `:account',
+`:pane-scroll', `:pane-total', `:detail', `:local', `:reader-lines' (the
+wrapped text of the open local chapter), `:reader-title', `:notes',
+`:stats', `:account',
 `:summary', `:theme', `:loading', `:error', `:message' and `:viewport-width'
 (the pixel canvas the reader paints)."
   (let* ((rows (etaf-weread--read app :rows))
@@ -1420,6 +1536,9 @@ The snapshot is a copy: mutating it never changes the reader.  Keys are
           :pane-scroll (etaf-weread--read app :pane-scroll)
           :pane-total (etaf-weread--read app :pane-total)
           :detail (and detail (copy-sequence detail))
+          :local (etaf-weread--read app :local)
+          :reader-lines (etaf-weread--read app :reader-lines)
+          :reader-title (etaf-weread--read app :reader-title)
           :notes (and notes (copy-sequence notes))
           :stats (and stats (copy-sequence stats))
           :account (let ((account (etaf-weread--read app :account)))
