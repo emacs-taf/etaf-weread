@@ -69,6 +69,8 @@
     (define-key map (kbd "F") #'etaf-weread--cycle-font)
     (define-key map (kbd "a") #'etaf-weread--auto-scroll)
     (define-key map (kbd "y") #'etaf-weread--lookup)
+    (define-key map (kbd "N") #'etaf-weread--next-note)
+    (define-key map (kbd "M") #'etaf-weread--choose-note)
     (define-key map (kbd "[") #'etaf-weread--reading-narrower)
     (define-key map (kbd "]") #'etaf-weread--reading-wider)
     (define-key map (kbd "d") #'etaf-weread--detail-pane)
@@ -566,6 +568,40 @@ chapter far away without turning every chapter in between."
       (etaf-weread-error
        (etaf-weread--write model :message (error-message-string error))))))
 
+(defun etaf-weread--next-note ()
+  "Jump to the next matched WeChat Reading highlight of the open book."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (unless (etaf-weread-next-local-note model)
+      (etaf-weread--write model :message
+                          "这本书还没有匹配到微信读书笔记（打开本地书时自动匹配）"))))
+
+(defun etaf-weread--choose-note ()
+  "Choose one of the matched highlights and jump to it."
+  (interactive)
+  (let* ((model (etaf-weread--current-model))
+         (notes (plist-get (etaf-weread--read model :local-notes) :notes)))
+    (if (null notes)
+        (etaf-weread--write model :message
+                            "这本书还没有匹配到微信读书笔记（打开本地书时自动匹配）")
+      (let* ((candidates
+              (cl-loop for note in notes
+                       for position from 1
+                       collect (cons (format "%d/%d 第 %d 章 · %s"
+                                             position (length notes)
+                                             (1+ (or (plist-get note :chapter) 0))
+                                             (truncate-string-to-width
+                                              (replace-regexp-in-string
+                                               "\n" " "
+                                               (or (plist-get note :thought)
+                                                   (plist-get note :text)
+                                                   ""))
+                                              28 nil nil "…"))
+                                     note)))
+             (choice (completing-read "微信读书笔记： " candidates nil t)))
+        (when (and choice (not (string-empty-p choice)))
+          (etaf-weread-show-local-note model (cdr (assoc choice candidates))))))))
+
 (defun etaf-weread--reading-narrower ()
   "Give the reading column two columns more inset."
   (interactive)
@@ -623,7 +659,8 @@ default face shows the reader background there instead of the frame's."
            " · 1/2/3 全部/在读/读完 · n 笔记本"
            " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
            " · 读本地书：j/k 逐行 · SPC 翻页 · g/G 章首尾 · c 选章 · m 单双栏 · f 全屏"
-           " · a 自动滚动 · y 查词 · F 字号 · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
+           " · a 自动滚动 · y 查词 · N 下一条微信笔记 · M 笔记列表 · F 字号"
+           " · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points

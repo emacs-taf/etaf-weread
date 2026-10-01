@@ -84,25 +84,25 @@ KEYS is a `kbd' string, so \"jj RET\" moves the selection twice and opens it."
   (etaf-weread-gui-status))
 
 (defun etaf-weread-gui-canvas-pixels ()
-  "Return (TOTAL . ODD) for the reader canvas in the selected frame.
-TOTAL is the pixel height of every canvas line.  ODD counts the lines whose
-height is neither the frame's character height nor, while a scaled reading
-font is active, the row height the page budget counted, so a font that grows
-a row past its budget is visible here."
+  "Return (TOTAL . TALL) for the reader canvas in the selected frame.
+TOTAL is the pixel height of every canvas line.  TALL counts the lines taller
+than the page budget's row height, so a glyph that outgrows its budget — the
+way a font that falls back to a taller face does — is visible here.  A line
+shorter than the budget is fine: a blank or Latin-only row may not reach the
+height a CJK row does."
   (with-current-buffer (get-buffer etaf-weread-buffer-name)
     (let* ((state (etaf-weread-gui--state))
-           (allowed (list (frame-char-height)
-                          (or (plist-get state :reader-line-height)
-                              (frame-char-height))))
-           (total 0) (odd 0))
+           (limit (max (frame-char-height)
+                       (or (plist-get state :reader-line-height) 0)))
+           (total 0) (tall 0))
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
           (let ((height (line-pixel-height)))
             (setq total (+ total height))
-            (unless (member height allowed) (cl-incf odd)))
+            (when (> height limit) (cl-incf tall)))
           (forward-line 1)))
-      (cons total odd))))
+      (cons total tall))))
 
 (defun etaf-weread-gui-check ()
   "Return the layout problems of the displayed reader, or nil when healthy.
@@ -144,7 +144,7 @@ line height the page budget counts, and both binding hints must arrive whole."
                                  (format "widest canvas line %spx exceeds window body width %spx"
                                          widest-line (and window (window-body-width window t))))
                                (unless (zerop (cdr canvas))
-                                 (format "%s row(s) use a height the page budget does not count"
+                                 (format "%s row(s) are taller than the page budget"
                                          (cdr canvas)))
                                (seq-find (lambda (hint)
                                            (not (string-match-p (regexp-quote hint) text)))

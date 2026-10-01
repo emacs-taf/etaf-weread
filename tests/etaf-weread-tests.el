@@ -1003,6 +1003,78 @@ when there is nothing to scroll, or it would keep moving a closed reader."
       (sleep-for 0.2)
       (should (equal '(0 0) (funcall position))))))
 
+(defun etaf-weread-tests--local-notes-client (request callback)
+  "Answer REQUEST with a notebook and highlights for the local fixture.
+The notebook lists `local-a' and the highlights share its text; one highlight
+does not exist in the local book and must be dropped."
+  (push request etaf-weread-tests--requests)
+  (pcase (plist-get request :op)
+    (:notebook
+     (funcall callback
+              (list :ok
+                    (list :ok t
+                          :data (list :books (list (list :bookId "77"
+                                                         :title "local-a"
+                                                         :counts (list :notes 3 :reviews 1))))))))
+    (:notes
+     (funcall callback
+              (list :ok
+                    (list :ok t
+                          :data (list :book (list :bookId "77" :title "local-a")
+                                      :highlights
+                                      (list (list :bookmarkId "n1" :chapterName "第一章"
+                                                  :range "1-2"
+                                                  :markText "习惯的起点总是一件很小的事"
+                                                  :createTime 1)
+                                            (list :bookmarkId "n2" :chapterName "第三章"
+                                                  :range "5-6"
+                                                  :markText "不再追逐一时的强度"
+                                                  :createTime 2)
+                                            (list :bookmarkId "n3" :chapterName "第二章"
+                                                  :range "9-9"
+                                                  :markText "本地书里没有的句子"
+                                                  :createTime 3))
+                                      :reviews (list (list :reviewId "r1" :range "1-2"
+                                                           :content "我的想法"
+                                                           :createTime 4)))))))
+    (_ (etaf-weread-tests--client request callback))))
+
+(ert-deftest etaf-weread-tests-local-notes-overlay ()
+  "The account's highlights are matched to the local book and navigable.
+A highlight whose text is in the local book marks its lines, one it does not
+contain is dropped, `N' walks the matches and a thought is reported."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((app (etaf-weread-tests--session #'etaf-weread-tests--local-notes-client))
+           (path (expand-file-name "local-a.txt" directory)))
+      (etaf-weread-locate app :local)
+      (etaf-weread-open-local-book app path)
+      (let* ((notes (plist-get (etaf-weread-state app) :local-notes))
+             (matches (plist-get notes :notes)))
+        (should (equal "77" (plist-get notes :book-id)))
+        (should (equal "local-a" (plist-get notes :title)))
+        ;; The highlight missing from the local text is dropped.
+        (should (= 2 (length matches)))
+        (should (equal '(0 2) (mapcar (lambda (note) (plist-get note :chapter))
+                                      matches)))
+        (should (equal "我的想法" (plist-get (car matches) :thought))))
+      ;; The chapter that carries a highlight marks its lines.
+      (should (seq-some (lambda (line) (plist-get line :note))
+                        (plist-get (etaf-weread-state app) :reader-lines)))
+      ;; `N' walks the matches and wraps after the last one.
+      (let* ((matches (plist-get (plist-get (etaf-weread-state app) :local-notes)
+                                 :notes))
+             (first (etaf-weread-next-local-note app)))
+        (should (member first matches))
+        (etaf-weread-show-local-note app (car (last matches)))
+        (should (equal (car matches) (etaf-weread-next-local-note app))))
+      ;; A jumped-to note reports its thought in the status line.
+      (etaf-weread-show-local-note
+       app (car (plist-get (plist-get (etaf-weread-state app) :local-notes)
+                           :notes)))
+      (should (string-match-p "我的想法"
+                              (plist-get (etaf-weread-state app) :message))))))
+
 (ert-deftest etaf-weread-tests-reading-time-and-chapters-accumulate ()
   "The reader records how long a local book was read and which chapters.
 The record survives into the next session on the same settings file, and a

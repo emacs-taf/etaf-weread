@@ -311,6 +311,14 @@ for example one that displays a translation of a whole sentence."
 (defconst etaf-weread--reading-chapter-limit 300
   "Chapter indices one book's reading record keeps, newest first.")
 
+(defcustom etaf-weread-local-note-matching t
+  "Whether a local book shows the account's highlights of the same title.
+Opening a local book looks for it in the notebook, fetches the highlights of
+the best match and marks the lines they share with the local text; `N' jumps
+to the next match.  Turn it off to keep local reading entirely offline."
+  :type 'boolean
+  :group 'etaf-weread)
+
 (defcustom etaf-weread-track-reading-time t
   "Whether the reader records how long and how far a local book was read.
 The record holds the total seconds and the chapter indices opened so far; it
@@ -401,6 +409,7 @@ other Lisp callers."
           :reading-path nil
           :reading-since nil
           :reading-visited nil
+          :local-note-id nil
           :position-timer nil
           :auto-scroll-timer nil
           :disposed nil
@@ -430,6 +439,7 @@ other Lisp callers."
           :reader-rows (etaf-ref 12 :name 'etaf-weread-reader-rows)
           :pane-total (etaf-ref 0 :name 'etaf-weread-pane-total)
           :local (etaf-ref nil :name 'etaf-weread-local)
+          :local-notes (etaf-ref nil :name 'etaf-weread-local-notes)
           :reader-lines (etaf-ref nil :name 'etaf-weread-reader-lines)
           :reader-title (etaf-ref "" :name 'etaf-weread-reader-title)
           :reader-measure (etaf-ref measure :name 'etaf-weread-reader-measure)
@@ -740,19 +750,25 @@ the chapter heading."
     (nreverse lines)))
 
 (defun etaf-weread--publish-local-chapter (app)
-  "Publish APP's current local chapter into the reading pane."
+  "Publish APP's current local chapter into the reading pane.
+A line that overlaps one of the account's highlights of the same book (see
+`etaf-weread-match-local-notes') is marked with `:note', which is what the
+reading view paints as a highlight bar."
   (let* ((local (etaf-weread--read app :local))
          (chapters (plist-get local :chapters))
          (index (or (plist-get local :index) 0))
          (chapter (nth index chapters))
-         (text (or (plist-get chapter :text) "")))
+         (text (or (plist-get chapter :text) ""))
+         (lines (cl-loop for line in (etaf-weread--wrap-text
+                                      text (etaf-weread--reading-columns app)
+                                      etaf-weread--paragraph-indent)
+                         for position from 1
+                         collect (list :key position :text line)))
+         (notes (etaf-weread--chapter-notes app index)))
+    (dolist (position (etaf-weread--note-line-indices lines notes))
+      (plist-put (nth position lines) :note t))
     (etaf-batch
-      (etaf-weread--write app :reader-lines
-                          (cl-loop for line in (etaf-weread--wrap-text
-                                                text (etaf-weread--reading-columns app)
-                                                etaf-weread--paragraph-indent)
-                                   for index from 1
-                                   collect (list :key index :text line)))
+      (etaf-weread--write app :reader-lines lines)
       (etaf-weread--write app :reader-title
                           (format "%s · 第 %d/%d 章 · %s"
                                   (or (plist-get local :title) "")
@@ -788,6 +804,8 @@ signals `etaf-weread-error'."
     (etaf-weread--restore-position app)
     (etaf-weread--reading-begin app)
     (etaf-weread--reading-note app)
+    (when etaf-weread-local-note-matching
+      (etaf-weread-match-local-notes app))
     (length chapters)))
 
 (defun etaf-weread--position-record (app)
@@ -1028,6 +1046,207 @@ own reporting."
       (signal 'etaf-weread-error '("没有可查的词：先打开一本本地书，或选中一段文字")))
     (funcall etaf-weread-dictionary-function text)
     text))
+
+(defun etaf-weread--match-key (string)
+  "Return STRING without spaces or punctuation, for title matching."
+  (replace-regexp-in-string "[[:space:][:punct:]]" "" (or string "")))
+
+(defun etaf-weread--compact-text (string)
+  "Return STRING with all whitespace removed, for cross-edition matching.
+A highlight may span a wrap point and editions differ in spacing, so the
+comparison drops whitespace before looking for it."
+  (replace-regexp-in-string "[[:space:]]+" "" (or string "")))
+
+(defun etaf-weread--match-local-title (app rows)
+  "Return the notebook ROW of APP's open local book, or nil.
+The title is compared without spaces or punctuation first, and a containment
+in either direction counts as a second chance."
+  (let* ((local (etaf-weread--read app :local))
+         (title (etaf-weread--match-key (plist-get local :title))))
+    (when (> (length title) 1)
+      (or (seq-find (lambda (row)
+                      (equal title
+                             (etaf-weread--match-key (plist-get row :title))))
+                    rows)
+          (seq-find (lambda (row)
+                      (let ((candidate (etaf-weread--match-key (plist-get row :title))))
+                        (and (> (length candidate) 1)
+                             (or (string-match-p (regexp-quote title) candidate)
+                                 (string-match-p (regexp-quote candidate) title)))))
+                    rows)))))
+
+(defun etaf-weread--chapter-find (chapters text)
+  "Return the index of the chapter of CHAPTERS containing TEXT, or nil."
+  (let ((needle (etaf-weread--compact-text text)))
+    (when (> (length needle) 1)
+      (cl-position-if (lambda (chapter)
+                        (string-match-p
+                         (regexp-quote needle)
+                         (etaf-weread--compact-text (plist-get chapter :text))))
+                      chapters))))
+
+(defun etaf-weread--local-note-matches (app notes)
+  "Return the highlights of NOTES that APP's open local book contains.
+Each match is (:id :chapter INDEX :text :thought); a highlight whose text is
+not in the local text is skipped, because another edition may have rewritten
+it or the passage may be missing entirely."
+  (let* ((chapters (plist-get (etaf-weread--read app :local) :chapters))
+         (matches nil))
+    (dolist (group (plist-get notes :groups))
+      (dolist (item (plist-get group :items))
+        (let ((text (string-trim (or (plist-get item :text) ""))))
+          (when-let* ((index (etaf-weread--chapter-find chapters text)))
+            (setq matches
+                  (append matches
+                          (list (list :id (plist-get item :id)
+                                      :chapter index
+                                      :text text
+                                      :thought (plist-get item :thought)))))))))
+    matches))
+
+(defun etaf-weread--chapter-notes (app index)
+  "Return APP's matched highlights that land in chapter INDEX."
+  (let ((notes (etaf-weread--read app :local-notes)))
+    (seq-filter (lambda (note) (equal index (plist-get note :chapter)))
+                (plist-get notes :notes))))
+
+(defun etaf-weread--note-line-indices (lines notes)
+  "Return the indices of LINES that any of NOTES covers.
+The line texts are joined into one whitespace-free string, so a highlight
+that spans a wrap point still marks every line it crosses."
+  (let ((joined (mapconcat (lambda (line)
+                             (etaf-weread--compact-text (plist-get line :text)))
+                           lines ""))
+        (spans nil))
+    (dolist (note notes)
+      (let* ((needle (etaf-weread--compact-text (plist-get note :text)))
+             (position (and (> (length needle) 1)
+                            (string-match (regexp-quote needle) joined))))
+        (when position
+          (push (cons position (+ position (length needle))) spans))))
+    (let ((offset 0)
+          (index 0)
+          (covered nil))
+      (dolist (line lines)
+        (let* ((text (etaf-weread--compact-text (plist-get line :text)))
+               (start offset)
+               (end (+ offset (length text))))
+          (when (seq-some (lambda (span)
+                            (and (< start (cdr span)) (> end (car span))))
+                          spans)
+            (push index covered))
+          (setq offset end
+                index (1+ index))))
+      (nreverse covered))))
+
+(defun etaf-weread-match-local-notes (app &optional refresh)
+  "Match APP's account highlights to its open local book and return them.
+The local title is looked up in the notebook and the highlights of the best
+match are kept when their text appears in the local chapters, so a different
+edition only contributes the passages it shares.  The result is published as
+the session state's `:local-notes' and holds `:book-id', `:title' and
+`:notes', each note carrying `:id', `:chapter', `:text' and `:thought'.
+REFRESH non-nil fetches again.  The requests are asynchronous, so a nil
+return means the reply has not arrived yet; a scripted client replies at
+once.  A session without an open local book signals `etaf-weread-error'."
+  (unless (plist-get (etaf-weread--read app :local) :path)
+    (signal 'etaf-weread-error '("先打开一本本地书")))
+  (when (or refresh (null (etaf-weread--read app :local-notes)))
+    (setf (plist-get app :local-note-id) nil)
+    (etaf-weread--write app :local-notes (list :book-id nil :title nil :notes nil))
+    (etaf-weread--call
+     app (list :op :notebook)
+     :on-ok (lambda (data)
+              (let* ((request (list :op :notebook))
+                     (rows (etaf-weread--rows-for app request data))
+                     (row (etaf-weread--match-local-title app rows)))
+                (if (null row)
+                    (etaf-weread--note
+                     app (format "微信读书笔记本里没有找到《%s》"
+                                 (or (plist-get (etaf-weread--read app :local) :title)
+                                     "这本书")))
+                  (etaf-weread--call
+                   app (list :op :notes :id (plist-get row :id))
+                   :on-ok (lambda (notes-data)
+                            (let* ((notes (etaf-weread--notes-from-data
+                                           notes-data (plist-get row :id)))
+                                   (matches (etaf-weread--local-note-matches app notes)))
+                              (etaf-weread--write
+                               app :local-notes
+                               (list :book-id (plist-get row :id)
+                                     :title (plist-get row :title)
+                                     :notes matches))
+                              (etaf-weread--publish-local-chapter app)
+                              (etaf-weread--note
+                               app (if matches
+                                       (format "已叠加《%s》的 %d 处划线/想法（N 下一条）"
+                                               (plist-get row :title) (length matches))
+                                     (format "《%s》的笔记与本地文本没有重合"
+                                             (plist-get row :title))))))))))))
+  (etaf-weread--read app :local-notes))
+
+(defun etaf-weread-show-local-note (app note)
+  "Show NOTE in APP and return the chapter it lands in.
+The chapter is read again and the view scrolls until the note's text is
+visible; the thought attached to the highlight is reported in the status
+line."
+  (let* ((chapter (etaf-weread-read-chapter app (1+ (or (plist-get note :chapter) 0))))
+         (lines (etaf-weread--read app :reader-lines))
+         (rows (max 1 (etaf-weread--pane-page-rows app)))
+         (index (car (etaf-weread--note-line-indices lines (list note)))))
+    (when index
+      (etaf-weread-scroll-pane
+       app (- (max 0 (- index (/ rows 3)))
+              (etaf-weread--read app :pane-scroll)))
+      (etaf-weread--remember-position app))
+    ;; `N' walks on from the note that was just shown, not from the scroll
+    ;; position, so showing a note twice does not trap the reader.
+    (setf (plist-get app :local-note-id) (plist-get note :id))
+    (etaf-weread--note
+     app (format "笔记：%s"
+                 (let ((thought (etaf-weread--string (plist-get note :thought))))
+                   (if (string-empty-p thought) (plist-get note :text) thought))))
+    chapter))
+
+(defun etaf-weread-next-local-note (app)
+  "Show the next matched highlight after the one just shown and return it.
+The search wraps: after the last match it continues with the first one.  A
+session without matched highlights returns nil."
+  (let* ((notes (plist-get (etaf-weread--read app :local-notes) :notes))
+         (local (etaf-weread--read app :local))
+         (chapter (or (plist-get local :index) 0))
+         (scroll (etaf-weread--read app :pane-scroll))
+         (lines (etaf-weread--read app :reader-lines))
+         (last (plist-get app :local-note-id))
+         (ordered
+          (seq-sort
+           (lambda (a b)
+             (or (< (nth 0 a) (nth 0 b))
+                 (and (= (nth 0 a) (nth 0 b)) (< (nth 1 a) (nth 1 b)))))
+           (mapcar (lambda (note)
+                     (list (or (plist-get note :chapter) 0)
+                           (or (car (etaf-weread--note-line-indices lines (list note))) 0)
+                           note))
+                   notes))))
+    (when ordered
+      (let* ((rest (when last
+                     (cdr (seq-drop-while
+                           (lambda (entry)
+                             (not (equal last (plist-get (nth 2 entry) :id))))
+                           ordered))))
+             (next (if last
+                       ;; After the last match the walk wraps to the first.
+                       (or (car rest) (car ordered))
+                     ;; No note shown yet: take the first one after the
+                     ;; reading place, else wrap.
+                     (or (seq-find (lambda (entry)
+                                     (or (> (nth 0 entry) chapter)
+                                         (and (= (nth 0 entry) chapter)
+                                              (> (nth 1 entry) scroll))))
+                                   ordered)
+                         (car ordered)))))
+        (etaf-weread-show-local-note app (nth 2 next))
+        (nth 2 next)))))
 
 (defun etaf-weread-read-chapter (app index)
   "Show chapter INDEX (counting from 1) of APP's opened local book.
@@ -2617,7 +2836,8 @@ reading font preset), `:reader-font-size' (its CSS pixel size, nil for the
 frame's own font), `:reader-line-height' (one reading row in pixels),
 `:reader-columns' (the width the open chapter is wrapped to), `:zen' (whether
 the reading-only layout is on), `:auto-scroll' (whether the reader advances
-by itself), `:notes', `:stats', `:account',
+by itself), `:local-notes' (the account's highlights matched to the open
+local book), `:notes', `:stats', `:account',
 `:summary', `:theme', `:loading', `:error', `:message' and `:viewport-width'
 (the pixel canvas the reader paints)."
   (let* ((rows (etaf-weread--read app :rows))
@@ -2650,6 +2870,8 @@ by itself), `:notes', `:stats', `:account',
           :pane-total (etaf-weread--read app :pane-total)
           :detail (and detail (copy-sequence detail))
           :local (etaf-weread--read app :local)
+          :local-notes (let ((notes (etaf-weread--read app :local-notes)))
+                         (and notes (copy-sequence notes)))
           :reader-lines (etaf-weread--read app :reader-lines)
           :reader-title (etaf-weread--read app :reader-title)
           :reader-measure (etaf-weread--read app :reader-measure)

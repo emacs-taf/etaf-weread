@@ -145,6 +145,38 @@
 ;; Show MATCH in APP, scroll until the match is on screen, and return the
 ;; chapter it lands in.
 ;;
+;; Function: etaf-weread-match-local-notes (app &optional refresh)
+;;;###autoload (autoload 'etaf-weread-match-local-notes "etaf-weread" nil t)
+;; Match APP's account highlights to its open local book and return them.
+;; The local title is looked up in the notebook and the highlights of the
+;; best match are kept when their text appears in the local chapters, so a
+;; different edition only contributes the passages it shares.  The result is
+;; published as the session state's `:local-notes' and holds `:book-id',
+;; `:title' and `:notes', each note carrying `:id', `:chapter', `:text' and
+;; `:thought'.  REFRESH non-nil fetches again; the requests are asynchronous,
+;; so a nil return means the reply has not arrived yet.  A session without an
+;; open local book signals `etaf-weread-error'.
+;;
+;; Function: etaf-weread-show-local-note (app note)
+;;;###autoload (autoload 'etaf-weread-show-local-note "etaf-weread" nil t)
+;; Show NOTE in APP and return the chapter it lands in.
+;; The chapter is read again and the view scrolls until the note's text is
+;; visible; the thought attached to the highlight is reported in the status
+;; line.  NOTE comes from `etaf-weread-match-local-notes'.
+;;
+;; Function: etaf-weread-next-local-note (app)
+;;;###autoload (autoload 'etaf-weread-next-local-note "etaf-weread" nil t)
+;; Show the next matched highlight after APP's reading place and return it.
+;; The search wraps: after the last match it continues with the first one; a
+;; session without matched highlights returns nil.
+;;
+;; Variable: etaf-weread-local-note-matching
+;; Whether a local book shows the account's highlights of the same title,
+;; default t.  Opening a local book looks for it in the notebook, fetches the
+;; highlights of the best match and marks the lines they share with the local
+;; text; the reader's `N' and `M' keys walk them.  Turn it off to keep local
+;; reading entirely offline.
+;;
 ;; Function: etaf-weread-search (app keyword)
 ;; Search the WeChat Reading store for KEYWORD and show the results.
 ;; The keyword is trimmed; a blank KEYWORD signals `etaf-weread-error' without

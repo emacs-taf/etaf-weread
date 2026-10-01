@@ -15,6 +15,7 @@
 | `F` | cycle the reading font: small, medium (the frame's font), large |
 | `a` | start or stop automatic reading (one line every few seconds) |
 | `y` | look the selected text, or the reading line, up in the dictionary |
+| `N` / `M` | jump to the next matched WeChat highlight / choose one from a list |
 | `[` / `]` | narrow or widen the reading column (more or less inset) |
 | `m` | cycle reading columns: automatic, 1, 2 … as many as fit |
 | `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
@@ -67,6 +68,11 @@ file into chapters and starts reading:
   reader: a `youdao-dictionary` with its API key and secret configured wins,
   and otherwise the macOS system dictionaries answer offline, so a word in an
   English book is one key away;
+- the account's highlights of the same book are matched to the local text
+  (`etaf-weread-local-note-matching'): opening a book finds it in the notebook
+  by title, keeps the highlights whose text the local edition shares, and
+  paints those lines with a tinted bar; `N` jumps to the next one (wrapping)
+  and `M` picks from the list, with the attached thought in the status line;
 - opening a book reports how long it was read and how many of its chapters
   were opened (`etaf-weread-reading-stats'), so a long book shows its
   accumulated time instead of starting from zero every session;

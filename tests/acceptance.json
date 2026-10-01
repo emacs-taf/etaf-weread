@@ -152,6 +152,11 @@
       "purpose": "A reading pane wide enough for two columns paints both slices of the chapter, Chinese paragraphs start indented while the heading stays flush, and the single-column choice is one call away."
     },
     {
+      "name": "etaf-weread-tests-local-notes-overlay",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "The account's highlights are matched to the open local book by title and text, the matching chapter lines are marked, a highlight absent from the local text is dropped, and N walks the matches with a wrap."
+    },
+    {
       "name": "etaf-weread-tests-reading-time-and-chapters-accumulate",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Reading a local book records its seconds and visited chapters in the settings file, and a new session on the same file starts from that record."

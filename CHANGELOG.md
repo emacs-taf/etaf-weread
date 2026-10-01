@@ -27,6 +27,10 @@ All notable user-visible changes to ETAF Weread.
   below the reader: `youdao-dictionary` when its API credentials are set,
   otherwise the macOS system dictionaries, through the replaceable
   `etaf-weread-dictionary-function`.
+- The account's WeChat Reading highlights are matched to the open local book
+  by title and text, and the shared passages are painted on the local lines;
+  `N` walks the matches, `M` picks one, and the attached thought is reported.
+  `etaf-weread-local-note-matching` turns the overlay off.
 - A local book keeps its reading time and visited chapters in the settings
   file (`etaf-weread-track-reading-time`); the status line reports them when
   the book is opened and `etaf-weread-reading-stats' returns them.

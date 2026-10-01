@@ -414,8 +414,12 @@ counts the taller rows that a scaled font paints."
           ;; lines, so the text itself cannot key the list.
           ;; The box keeps a one-line height; a line whose glyphs are taller
           ;; (a scaled CJK fallback) grows it, and the model budgets that
-          ;; height, so the wrapped text never overflows the pane.
+          ;; height, so the wrapped text never overflows the pane.  A line the
+          ;; account highlighted in the same book carries a tinted bar.
           (box :for (line (cdr slice)) :key (plist-get line :key)
+               :width 'stretch
+               :bgcolor (and (plist-get line :note)
+                             (etaf-weread-color :accent-soft))
                :height '(lh 1) :overflow 'hidden
             (text (expr (or (plist-get line :text) "")))))))
       (box :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0) :min-height '(lh 0))))
