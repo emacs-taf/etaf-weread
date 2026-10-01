@@ -98,6 +98,18 @@ The canvas must fit the window that shows it, no row may be taller than the
 line height the page budget counts, and both binding hints must arrive whole."
   (let* ((window (get-buffer-window etaf-weread-buffer-name t))
          (canvas (etaf-weread-gui-canvas-pixels))
+         (widest-line (with-current-buffer (get-buffer etaf-weread-buffer-name)
+                        (let ((width 0))
+                          (save-excursion
+                            (goto-char (point-min))
+                            (while (not (eobp))
+                              (setq width
+                                    (max width
+                                         (car (window-text-pixel-size
+                                               window (line-beginning-position)
+                                               (line-end-position)))))
+                              (forward-line 1)))
+                          width)))
          (text (with-current-buffer (get-buffer etaf-weread-buffer-name)
                  (buffer-substring-no-properties (point-min) (point-max))))
          (state (etaf-weread-gui--state))
@@ -115,6 +127,10 @@ line height the page budget counts, and both binding hints must arrive whole."
                                             (<= (car canvas) (window-pixel-height window)))
                                  (format "canvas %spx does not fit window %spx"
                                          (car canvas) (and window (window-pixel-height window))))
+                               (unless (and window
+                                            (<= widest-line (window-body-width window t)))
+                                 (format "widest canvas line %spx exceeds window body width %spx"
+                                         widest-line (and window (window-body-width window t))))
                                (unless (zerop (cdr canvas))
                                  (format "%s row(s) exceed the line height" (cdr canvas)))
                                (seq-find (lambda (hint)
