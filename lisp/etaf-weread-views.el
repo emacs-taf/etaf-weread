@@ -392,7 +392,10 @@ actions the card offers."
         (box :width '(ch 8) :height '(lh 4) :text-align 'center
              :bgcolor (etaf-weread-color :cover)
              :color (etaf-weread-color :accent)
-             :font-weight 'bold
+             ;; The glyph may be larger than one line because this box is four
+             ;; lines tall: the row keeps its height, so the page budget (which
+             ;; counts lines) still holds.
+             :font-size 28 :font-weight 'bold
           (text (expr (if (and (plist-get detail :title)
                                (not (string-empty-p (plist-get detail :title))))
                           (substring (plist-get detail :title) 0 1)

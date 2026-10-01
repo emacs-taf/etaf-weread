@@ -5,6 +5,7 @@ LOAD_PATH = -L . -L lisp -L tests -L ../../etaf -L ../../etaf-ui -L ../../etaf-d
 SOURCES = lisp/etaf-weread-theme.el lisp/etaf-weread-service.el lisp/etaf-weread-index.el
 SOURCES += lisp/etaf-weread-model.el lisp/etaf-weread-views.el lisp/etaf-weread-app.el etaf-weread.el
 SOURCES += $(wildcard examples/*.el)
+SOURCES += scripts/weread-gui-probe.el
 
 .PHONY: compile load check clean structure-check setup-hooks acceptance api-check test
 compile:
