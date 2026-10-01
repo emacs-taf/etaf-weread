@@ -334,10 +334,11 @@ needs.  MODE `stats' hides the search field, which has no meaning there."
       (etaf-button :label (if loading "… 加载中" "↻ 刷新") :variant 'ghost
                    :on-press on-refresh))))
 
-(etaf-define-component etaf-weread--view-tabs (&key pane on-pane)
+(etaf-define-component etaf-weread--view-tabs (&key pane on-pane layout)
   "Render the list/detail/notes switch a compact layout uses.
 The switch itself is the shared Tabs control; this Component only places it
-with the reader's hint line."
+with the reader's hint line.  A narrow frame shows the short hint, because
+the full binding summary cannot share a phone-like line with the switch."
   :view
   (flex :width 'stretch :height '(lh 2) :gap '((lh 0) (ch 2))
         :flex-shrink 0 :align-items 'center :padding '((lh 0) (ch 2))
@@ -352,7 +353,9 @@ with the reader's hint line."
     (box :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
          :height '(lh 1) :text-align 'right :color (etaf-weread-color :dim)
          :overflow 'hidden
-      (text (expr "j/k 选择 · RET 打开 · v 切换面板")))))
+      (text (expr (if (eq layout 'narrow)
+                       "? 帮助"
+                     "j/k 选择 · RET 打开 · v 切换面板"))))))
 
 (etaf-define-component etaf-weread--view-note (&key text loading height)
   "Render TEXT as a quiet placeholder, or a skeleton while LOADING.
@@ -584,10 +587,17 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
 ;;; Footer
 ;;; ---------------------------------------------------------------------------
 
+(defconst etaf-weread--footer-hint
+  "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"
+  "Binding summary at the right edge of the reader's status bar.
+Its column width sizes the hint box, so the summary is never clipped.")
+
 (etaf-define-component etaf-weread--view-footer
     (&key account summary message error compact)
   "Render the status bar with ACCOUNT, SUMMARY and the latest MESSAGE.
-A failure is painted in the danger color, a hint in the muted one."
+A failure is painted in the danger color, a hint in the muted one.  The hint
+box takes exactly the columns its text needs, so a wide frame shows the whole
+binding summary."
   :view
   (flex :width 'stretch :height (if compact '(lh 2) '(lh 1))
         :flex-direction (if compact 'column 'row)
@@ -606,9 +616,11 @@ A failure is painted in the danger color, a hint in the muted one."
          :height '(lh 1) :overflow 'hidden
          :color (etaf-weread-color (if error :danger :dim))
       (text (expr (or message summary ""))))
-    (box :if (not compact) :width '(ch 34) :height '(lh 1) :text-align 'right
-         :overflow 'hidden :color (etaf-weread-color :dim)
-      (text "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"))
+    (box :if (not compact)
+         :width (list 'ch (string-width etaf-weread--footer-hint))
+         :height '(lh 1) :text-align 'right :overflow 'hidden
+         :color (etaf-weread-color :dim)
+      (text (expr etaf-weread--footer-hint)))
     (box :if compact :width 'stretch :height '(lh 1) :overflow 'hidden
          :color (etaf-weread-color (if error :danger :dim))
       (text (expr (or message summary ""))))))

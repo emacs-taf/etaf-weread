@@ -112,6 +112,11 @@
       "purpose": "Mounting paints the shelf into a buffer, and killing that buffer lets the same session mount again."
     },
     {
+      "name": "etaf-weread-tests-status-hints-fit-their-layout",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "The wide status bar and the compact tab row each paint their binding hint whole, so no layout clips the summary off."
+    },
+    {
       "name": "etaf-weread-tests-open-and-close-own-a-buffer",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Opening installs the reader keymap, hides the mode line and paints the shelf; closing kills the buffer."

@@ -476,6 +476,7 @@ the session's timers and pending backend requests."
     (etaf-weread--view-tabs
      :if (etaf-weread--compact-layout-p session)
      :pane (etaf-weread--read session :pane)
+     :layout (etaf-weread--read session :layout)
      :on-pane on-pane)
     (etaf-weread--view-footer
      :account (etaf-weread--read session :account)

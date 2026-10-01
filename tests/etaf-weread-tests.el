@@ -469,6 +469,58 @@ The second book carries an orphan thought, so grouping is observable."
       (when (get-buffer " *etaf-weread-tests-mount*")
         (kill-buffer " *etaf-weread-tests-mount*")))))
 
+(ert-deftest etaf-weread-tests-status-hints-fit-their-layout ()
+  "Each layout paints its binding hint whole instead of clipping it.
+The wide status bar and the compact tab row choose a hint that fits the
+columns they are painted in, so no layout cuts the summary off."
+  (setq etaf-weread-tests--requests nil)
+  (let ((etaf-weread-buffer-name " *etaf-weread-tests-hints*")
+        (app (etaf-weread-tests--session))
+        (headless (get-buffer-create " *etaf-weread-tests-hints-wide*"))
+        (narrow nil))
+    (unwind-protect
+        (progn
+          ;; Headless (wide): the status bar carries the whole summary.
+          (etaf-mount headless (etaf-weread-view app)
+                      (list :viewport-width 1200 :viewport-height 40))
+          (with-current-buffer headless
+            (should (string-match-p
+                     (regexp-quote "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助")
+                     (buffer-substring-no-properties (point-min) (point-max)))))
+          (kill-buffer headless)
+          ;; A medium frame (the batch window is 80 columns): the compact tab
+          ;; row still fits the whole summary next to the switch.
+          (let ((buffer (etaf-weread-open app)))
+            (etaf-weread-refresh app)
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (should (string-match-p
+                       (regexp-quote "j/k 选择 · RET 打开 · v 切换面板")
+                       (buffer-substring-no-properties (point-min) (point-max)))))
+            ;; A narrow frame: only the short hint fits.
+            (setq narrow (split-window (selected-window) 25 'right))
+            (set-window-buffer (selected-window)
+                               (get-buffer-create " *etaf-weread-tests-other*"))
+            (set-window-buffer narrow buffer)
+            (select-window narrow)
+            (etaf-weread-refresh app)
+            (etaf-runtime-refit (etaf-runtime-for-buffer buffer) 371 24)
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (with-current-buffer buffer
+              (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+                (should (string-match-p (regexp-quote "? 帮助") text))
+                (should-not (string-match-p
+                             (regexp-quote "j/k 选择 · RET 打开 · v 切换面板")
+                             text))))))
+      (when (and narrow (window-live-p narrow)
+                 (not (eq narrow (selected-window))))
+        (delete-window narrow))
+      (when (get-buffer " *etaf-weread-tests-hints*")
+        (kill-buffer " *etaf-weread-tests-hints*"))
+      (when (buffer-live-p headless) (kill-buffer headless))
+      (when (get-buffer " *etaf-weread-tests-other*")
+        (kill-buffer " *etaf-weread-tests-other*")))))
+
 (ert-deftest etaf-weread-tests-open-and-close-own-a-buffer ()
   "Opening installs the reader keymap and closing kills the buffer."
   (setq etaf-weread-tests--requests nil)
