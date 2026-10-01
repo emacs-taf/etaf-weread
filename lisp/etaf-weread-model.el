@@ -194,11 +194,130 @@ scrolled position settles before it is written."
   :type 'number
   :group 'etaf-weread)
 
+(defcustom etaf-weread-auto-scroll-interval 6
+  "Seconds auto-scroll waits before advancing one reading line.
+A comfortable line pace is a handful of seconds; the reader's `a' key turns
+auto-scroll on and off and the pace applies while it runs."
+  :type 'number
+  :group 'etaf-weread)
+
+(declare-function youdao-dictionary-search "youdao-dictionary" (query))
+
+(defcustom etaf-weread-dictionary-buffer-name "*ETAF 词典*"
+  "Buffer the lookup backends display a definition in."
+  :type 'string
+  :group 'etaf-weread)
+
+(defun etaf-weread--youdao-configured-p ()
+  "Return non-nil when the installed `youdao-dictionary' has API credentials.
+The package needs a Youdao app key and secret; without them its request
+signals before it reaches the network."
+  (and (require 'youdao-dictionary nil t)
+       (boundp 'youdao-dictionary-app-key)
+       (stringp youdao-dictionary-app-key)
+       (not (string-empty-p youdao-dictionary-app-key))
+       (boundp 'youdao-dictionary-secret-key)
+       (stringp youdao-dictionary-secret-key)
+       (not (string-empty-p youdao-dictionary-secret-key))))
+
+(defun etaf-weread-youdao-lookup (query)
+  "Show QUERY's entry from the `youdao-dictionary' package.
+The package's API key and secret must be configured; otherwise
+`etaf-weread-error' signals and the reader keeps running."
+  (unless (require 'youdao-dictionary nil t)
+    (signal 'etaf-weread-error
+            '("未安装 youdao-dictionary（M-x package-install RET youdao-dictionary）")))
+  (youdao-dictionary-search query))
+
+(defconst etaf-weread--macos-lookup-script
+  (concat "import Foundation\n"
+          "import CoreServices\n"
+          "let word = ProcessInfo.processInfo.environment[\"WEREAD_QUERY\"] ?? \"\"\n"
+          "if let definition = DCSCopyTextDefinition(nil, word as CFString,\n"
+          "        CFRangeMake(0, word.utf16.count)) {\n"
+          "  print(definition.takeRetainedValue() as String)\n"
+          "}\n")
+  "Swift program reading one word's macOS dictionary definition.
+The word arrives in the WEREAD_QUERY environment variable so no shell
+quoting is involved, and the definition goes to standard output.")
+
+(defun etaf-weread-macos-lookup (query)
+  "Show QUERY's definition from the macOS system dictionaries.
+`swift' reads the definition through the DictionaryServices framework, so the
+lookup uses whatever dictionaries the system has and needs no account.  A word
+the dictionaries do not know signals `etaf-weread-error'; macOS only."
+  (unless (eq system-type 'darwin)
+    (signal 'etaf-weread-error '("macOS 系统词典仅在 macOS 上可用")))
+  (let ((process-environment (cons (concat "WEREAD_QUERY=" query)
+                                   process-environment))
+        definition)
+    (with-temp-buffer
+      (let ((status (call-process "swift" nil t nil
+                                  "-e" etaf-weread--macos-lookup-script)))
+        (unless (zerop status)
+          (signal 'etaf-weread-error
+                  (list (format "系统词典查询失败（swift 退出 %s）" status))))
+        (setq definition (string-trim (buffer-string)))))
+    (when (string-empty-p definition)
+      (signal 'etaf-weread-error (list (format "词典里没有找到「%s」" query))))
+    (etaf-weread--show-definition query definition)))
+
+(defun etaf-weread--show-definition (query definition)
+  "Show QUERY and DEFINITION in `etaf-weread-dictionary-buffer-name'.
+The buffer opens below the reader without taking its focus, so looking a word
+up does not interrupt the reading."
+  (let ((buffer (get-buffer-create etaf-weread-dictionary-buffer-name)))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (propertize query 'face 'bold) "\n\n" definition "\n")
+        (goto-char (point-min))
+        (special-mode)))
+    (display-buffer buffer
+                    '((display-buffer-reuse-window display-buffer-below-selected)
+                      (window-height . 0.35)))
+    buffer))
+
+(defun etaf-weread-default-lookup (query)
+  "Show QUERY's definition with the best available backend.
+A `youdao-dictionary' with its API credentials configured is used first;
+elsewhere the macOS system dictionary serves the lookup.  A machine with
+neither signals `etaf-weread-error' and suggests setting
+`etaf-weread-dictionary-function'."
+  (cond
+   ((etaf-weread--youdao-configured-p) (etaf-weread-youdao-lookup query))
+   ((eq system-type 'darwin) (etaf-weread-macos-lookup query))
+   (t (signal 'etaf-weread-error
+              '("没有可用的词典：配置 youdao-dictionary 的 API key/secret，或设置 etaf-weread-dictionary-function")))))
+
+(defcustom etaf-weread-dictionary-function #'etaf-weread-default-lookup
+  "Function of one string that shows a dictionary entry for it.
+The reader's `y' key passes the selected text or the line at the top of the
+visible chapter.  The default uses a configured `youdao-dictionary', falls
+back to the macOS system dictionary, and can be replaced with any backend,
+for example one that displays a translation of a whole sentence."
+  :type 'function
+  :group 'etaf-weread)
+
 (defconst etaf-weread--position-limit 50
   "Local books whose reading position is kept.")
 
 (defconst etaf-weread--bookmark-limit 200
   "Bookmarks kept across all local books.")
+
+(defconst etaf-weread--reading-limit 50
+  "Local books whose reading time is kept.")
+
+(defconst etaf-weread--reading-chapter-limit 300
+  "Chapter indices one book's reading record keeps, newest first.")
+
+(defcustom etaf-weread-track-reading-time t
+  "Whether the reader records how long and how far a local book was read.
+The record holds the total seconds and the chapter indices opened so far; it
+lives in `etaf-weread-settings-file' and is what
+`etaf-weread-reading-stats' reports."
+  :type 'boolean
+  :group 'etaf-weread)
 
 (defconst etaf-weread--search-match-limit 200
   "Most matches an in-book search returns.")
@@ -234,7 +353,8 @@ signalling: losing a preference must not interrupt the reading."
                        :reader-spread (etaf-weread--read app :reader-spread)
                        :reader-font (etaf-weread--read app :reader-font)
                        :positions (plist-get app :positions)
-                       :bookmarks (plist-get app :bookmarks))
+                       :bookmarks (plist-get app :bookmarks)
+                       :reading (plist-get app :reading))
                  (current-buffer))))
     (error
      (etaf-weread--write app :message
@@ -276,7 +396,13 @@ other Lisp callers."
                        (and (listp stored) stored))
           :bookmarks (let ((stored (plist-get settings :bookmarks)))
                        (and (listp stored) stored))
+          :reading (let ((stored (plist-get settings :reading)))
+                     (and (listp stored) stored))
+          :reading-path nil
+          :reading-since nil
+          :reading-visited nil
           :position-timer nil
+          :auto-scroll-timer nil
           :disposed nil
           :started-at nil
           :follow-timer nil
@@ -317,6 +443,7 @@ other Lisp callers."
           :reader-shown (etaf-ref 1 :name 'etaf-weread-reader-shown)
           :reader-capacity (etaf-ref 0 :name 'etaf-weread-reader-capacity)
           :reader-progress (etaf-ref 0 :name 'etaf-weread-reader-progress)
+          :auto-scroll (etaf-ref nil :name 'etaf-weread-auto-scroll)
           :zen (etaf-ref nil :name 'etaf-weread-zen)
           :detail (etaf-ref nil :name 'etaf-weread-detail)
           :notes (etaf-ref nil :name 'etaf-weread-notes)
@@ -659,6 +786,8 @@ signals `etaf-weread-error'."
     ;; before the stored position is resolved against the new row budget.
     (etaf-weread--sync-layout app)
     (etaf-weread--restore-position app)
+    (etaf-weread--reading-begin app)
+    (etaf-weread--reading-note app)
     (length chapters)))
 
 (defun etaf-weread--position-record (app)
@@ -694,8 +823,12 @@ only the most recent `etaf-weread--position-limit' books are kept."
         record))))
 
 (defun etaf-weread--schedule-position-save (app)
-  "Store APP's reading position once the scrolling settles."
-  (when (and etaf-weread-remember-positions
+  "Store APP's reading position and time once the scrolling settles.
+Both readings are written by the same quiet timer because both are only worth
+writing when the reader stopped moving; the timer runs when either feature
+wants it, so turning positions off still counts reading time."
+  (when (and (or etaf-weread-remember-positions
+                 etaf-weread-track-reading-time)
              (plist-get (etaf-weread--read app :local) :chapters))
     (when-let* ((timer (plist-get app :position-timer)))
       (cancel-timer timer))
@@ -704,6 +837,7 @@ only the most recent `etaf-weread--position-limit' books are kept."
                        (lambda ()
                          (setf (plist-get app :position-timer) nil)
                          (unless (plist-get app :disposed)
+                           (etaf-weread--reading-accumulate app)
                            (etaf-weread--remember-position app)))))))
 
 (defun etaf-weread--restore-position (app)
@@ -857,6 +991,44 @@ Return the chapter it lands in, counting from 1."
       (etaf-weread--remember-position app)
       chapter)))
 
+(defun etaf-weread--visible-line-text (app)
+  "Return the first non-blank line APP's reading pane shows, or nil."
+  (let* ((lines (or (etaf-weread--read app :reader-lines) nil))
+         (start (max 0 (min (etaf-weread--read app :pane-scroll)
+                            (max 0 (1- (length lines))))))
+         (rows (max 1 (etaf-weread--pane-page-rows app)))
+         (slice (seq-subseq lines start (min (length lines) (+ start rows)))))
+    (seq-some (lambda (line)
+                (let ((text (string-trim (or (plist-get line :text) ""))))
+                  (unless (string-empty-p text) text)))
+              slice)))
+
+(defun etaf-weread--lookup-text (app)
+  "Return what APP's dictionary key should look up.
+The selected text wins; otherwise the line at the top of the visible chapter
+is the line being read.  Return nil when there is nothing to look up."
+  (let ((buffer (plist-get app :buffer)))
+    (or (and (buffer-live-p buffer)
+             (with-current-buffer buffer
+               (when (use-region-p)
+                 (let ((text (string-trim
+                              (buffer-substring-no-properties
+                               (region-beginning) (region-end)))))
+                   (unless (string-empty-p text) text)))))
+        (etaf-weread--visible-line-text app))))
+
+(defun etaf-weread-lookup (app &optional query)
+  "Look QUERY up with `etaf-weread-dictionary-function' and return the text.
+QUERY defaults to the selected text, or while reading to the line at the top
+of the visible chapter.  `etaf-weread-error' signals when there is nothing to
+look up or the backend is missing; a backend that needs the network does its
+own reporting."
+  (let ((text (string-trim (or query (or (etaf-weread--lookup-text app) "")))))
+    (when (string-empty-p text)
+      (signal 'etaf-weread-error '("没有可查的词：先打开一本本地书，或选中一段文字")))
+    (funcall etaf-weread-dictionary-function text)
+    text))
+
 (defun etaf-weread-read-chapter (app index)
   "Show chapter INDEX (counting from 1) of APP's opened local book.
 INDEX is clamped into range and a session without a local book does nothing.
@@ -865,6 +1037,8 @@ Return the chapter index actually shown."
          (chapters (plist-get local :chapters)))
     (when chapters
       (let ((next (max 0 (min (1- (length chapters)) (1- (max 1 index))))))
+        ;; The time belongs to the chapter just left.
+        (etaf-weread--reading-accumulate app)
         (etaf-batch
           (setf (plist-get local :index) next)
           (etaf-weread--write app :local local)
@@ -873,6 +1047,7 @@ Return the chapter index actually shown."
         ;; The reader pane is on screen now, so the canvas and row budget
         ;; follow the reading font before the position is stored.
         (etaf-weread--sync-layout app)
+        (etaf-weread--reading-begin app)
         (etaf-weread--remember-position app)
         (1+ next)))))
 
@@ -890,6 +1065,61 @@ as it is, because there is nothing to read in zen, and nil is returned."
                                  "阅读模式：f 返回 · [ ] 留白 · T 主题"
                                "已退出阅读模式"))
       zen)))
+
+(defun etaf-weread--cancel-auto-scroll (app)
+  "Stop APP's auto-scroll timer and clear its reading.
+The timer is the only owner of a running auto-scroll, so canceling is also
+what a disposal and leaving the reading pane do."
+  (when-let* ((timer (plist-get app :auto-scroll-timer)))
+    (cancel-timer timer)
+    (setf (plist-get app :auto-scroll-timer) nil))
+  (etaf-weread--write app :auto-scroll nil))
+
+(defun etaf-weread--auto-scroll-tick (app)
+  "Advance APP one reading line and turn the chapter when it ends.
+The tick is the only place a running auto-scroll moves, so it is bounded by
+the book: the last line of the last chapter stops it.  A session that was
+disposed, turned auto-scroll off, or left the reading pane while the timer
+was pending cancels the timer here instead of scrolling something invisible."
+  (if (or (plist-get app :disposed)
+          (not (etaf-weread--read app :auto-scroll))
+          (not (eq (etaf-weread--effective-pane app) 'reader)))
+      (etaf-weread--cancel-auto-scroll app)
+    (let ((before (etaf-weread--read app :pane-scroll)))
+      (etaf-weread-scroll-pane app 1)
+      (when (= before (etaf-weread--read app :pane-scroll))
+        (let* ((local (etaf-weread--read app :local))
+               (index (or (plist-get local :index) 0))
+               (chapters (length (plist-get local :chapters))))
+          (if (< (1+ index) chapters)
+              (etaf-weread-read-chapter app (+ index 2))
+            (etaf-weread--cancel-auto-scroll app)
+            (etaf-weread--note app "已读到最后，自动滚动停止")))))))
+
+(defun etaf-weread-toggle-auto-scroll (app)
+  "Toggle APP's auto-scroll and return the new value.
+While it runs, one reading line is advanced every
+`etaf-weread-auto-scroll-interval' seconds; a chapter that ends turns to the
+next one, and the last line of the book stops it.  A session that is not
+showing a local chapter does nothing and returns nil, because there is
+nothing to scroll.  The timer is released when auto-scroll stops, when the
+session is disposed and when the reading pane is left."
+  (when (eq (etaf-weread--effective-pane app) 'reader)
+    (let ((on (not (etaf-weread--read app :auto-scroll))))
+      (if on
+          (progn
+            (etaf-weread--write app :auto-scroll t)
+            (setf (plist-get app :auto-scroll-timer)
+                  (run-at-time etaf-weread-auto-scroll-interval
+                               etaf-weread-auto-scroll-interval
+                               #'etaf-weread--auto-scroll-tick app))
+            (etaf-weread--note
+             app (format "自动滚动：每 %g 秒一行（a 停止）"
+                         etaf-weread-auto-scroll-interval))
+            t)
+        (etaf-weread--cancel-auto-scroll app)
+        (etaf-weread--note app "自动滚动：已停止")
+        nil))))
 
 (defun etaf-weread-adjust-reading-measure (app delta)
   "Widen APP's reading column by DELTA columns and return its new width.
@@ -923,6 +1153,99 @@ is actually on screen.  The choice is stored for the next session."
                                    (if (eq choice 'auto) "自动" choice)
                                    (etaf-weread--read app :reader-shown)))
     choice))
+
+(defun etaf-weread-reading-stats (app &optional path)
+  "Return how much APP has read PATH, or its open local book.
+The value is a plist with `:path', `:seconds' (total reading time),
+`:chapters' (the chapter indices opened, newest first, at most
+`etaf-weread--reading-chapter-limit') and `:at' (when it was last read).  A
+book without a record returns nil, and PATH defaults to the open local book.
+Only `etaf-weread-track-reading-time' collects the records."
+  (let ((path (or path (plist-get (etaf-weread--read app :local) :path))))
+    (and path
+         (seq-find (lambda (entry) (equal (plist-get entry :path) path))
+                   (plist-get app :reading)))))
+
+(defun etaf-weread--reading-accumulate (app)
+  "Add the time APP has been reading to its book's record and store it.
+Called on every settled scroll, chapter turn, leave and close, so the record
+never loses more than the last quiet moment.  A session that is not reading a
+local book does nothing."
+  (when (and etaf-weread-track-reading-time
+             (plist-get app :reading-path)
+             (plist-get app :reading-since))
+    (let* ((path (plist-get app :reading-path))
+           (elapsed (max 0 (- (float-time) (plist-get app :reading-since))))
+           (visited (plist-get app :reading-visited))
+           (kept (seq-remove (lambda (entry)
+                               (equal (plist-get entry :path) path))
+                             (plist-get app :reading)))
+           (previous (seq-find (lambda (entry)
+                                 (equal (plist-get entry :path) path))
+                               (plist-get app :reading)))
+           (chapters (seq-uniq (append visited (plist-get previous :chapters)))))
+      (setf (plist-get app :reading)
+            (seq-take (cons (list :path path
+                                  :seconds (+ (or (plist-get previous :seconds) 0)
+                                              elapsed)
+                                  :chapters (seq-take chapters
+                                                      etaf-weread--reading-chapter-limit)
+                                  :at (float-time))
+                            kept)
+                      etaf-weread--reading-limit)
+            (plist-get app :reading-since) (float-time))
+      (etaf-weread--settings-write app))))
+
+(defun etaf-weread--reading-begin (app)
+  "Start tracking reading time for APP's open local book.
+Switching to another book stores the previous one first and writes the new
+record at once, resuming after a pause only restarts the clock, and the
+chapter that is open now counts as visited."
+  (when etaf-weread-track-reading-time
+    (let* ((local (etaf-weread--read app :local))
+           (path (plist-get local :path))
+           (index (plist-get local :index)))
+      (when path
+        (let* ((new-book (not (equal path (plist-get app :reading-path))))
+               (new-chapter (not (equal (car (plist-get app :reading-visited))
+                                        index))))
+          (when (and new-book (plist-get app :reading-path))
+            (etaf-weread--reading-accumulate app))
+          (when new-book
+            (setf (plist-get app :reading-path) path
+                  (plist-get app :reading-visited) nil))
+          (setf (plist-get app :reading-since)
+                (or (plist-get app :reading-since) (float-time)))
+          (when new-chapter
+            (setf (plist-get app :reading-visited)
+                  (seq-take (cons index (delete index (plist-get app :reading-visited)))
+                            etaf-weread--reading-chapter-limit)))
+          (when (or new-book new-chapter)
+            (etaf-weread--reading-accumulate app)))))))
+
+(defun etaf-weread--reading-pause (app)
+  "Stop counting reading time while APP shows something else.
+The book and the chapters seen so far stay remembered, so opening the reader
+again resumes the same record."
+  (etaf-weread--reading-accumulate app)
+  (setf (plist-get app :reading-since) nil))
+
+(defun etaf-weread--reading-note (app)
+  "Report APP's accumulated reading of the open book in the status line.
+A book that was read before reports its stored time and chapter count; a new
+one only says that reading started."
+  (let* ((local (etaf-weread--read app :local))
+         (stats (etaf-weread-reading-stats app))
+         (title (or (plist-get local :title) "本地书")))
+    (etaf-weread--note
+     app (let ((duration (and stats
+                              (etaf-weread-format-duration
+                               (plist-get stats :seconds)))))
+           (if (and duration (not (string-empty-p duration)))
+               (format "%s · 已读 %s · %d 章"
+                       title duration
+                       (length (or (plist-get stats :chapters) nil)))
+             (format "%s · 开始阅读" title))))))
 
 (defun etaf-weread--reader-font-label (font)
   "Return the status-line name of the reading FONT preset."
@@ -2123,8 +2446,9 @@ showing.  A wide layout keeps every column, so its pane choice is kept."
   (when (and (etaf-weread--compact-layout-p app)
              (not (eq (etaf-weread--read app :pane) 'list)))
     (etaf-weread--write app :pane 'list)
-    ;; Leaving the reading pane gives the frame its full canvas back when a
-    ;; scaled reading font had shrunk it.
+    ;; Leaving the reading pane stops the reading clock and gives the frame
+    ;; its full canvas back when a scaled reading font had shrunk it.
+    (etaf-weread--reading-pause app)
     (etaf-weread--sync-layout app)))
 
 (defun etaf-weread--effective-pane (app)
@@ -2264,6 +2588,8 @@ keeps the place even when the scroll had not settled yet."
     (cancel-timer timer)
     (setf (plist-get app :position-timer) nil)
     (etaf-weread--remember-position app))
+  (etaf-weread--reading-pause app)
+  (etaf-weread--cancel-auto-scroll app)
   (setf (plist-get app :disposed) t)
   (cl-incf (plist-get app :index-generation))
   (setf (plist-get app :index-pending) nil)
@@ -2290,7 +2616,8 @@ wrapped text of the open local chapter), `:reader-title', `:reader-measure'
 reading font preset), `:reader-font-size' (its CSS pixel size, nil for the
 frame's own font), `:reader-line-height' (one reading row in pixels),
 `:reader-columns' (the width the open chapter is wrapped to), `:zen' (whether
-the reading-only layout is on), `:notes', `:stats', `:account',
+the reading-only layout is on), `:auto-scroll' (whether the reader advances
+by itself), `:notes', `:stats', `:account',
 `:summary', `:theme', `:loading', `:error', `:message' and `:viewport-width'
 (the pixel canvas the reader paints)."
   (let* ((rows (etaf-weread--read app :rows))
@@ -2335,6 +2662,7 @@ the reading-only layout is on), `:notes', `:stats', `:account',
           :reader-shown (etaf-weread--read app :reader-shown)
           :reader-capacity (etaf-weread--read app :reader-capacity)
           :reader-progress (etaf-weread--read app :reader-progress)
+          :auto-scroll (etaf-weread--read app :auto-scroll)
           :bookmarks (let ((bookmarks (plist-get app :bookmarks)))
                        (and bookmarks (copy-sequence bookmarks)))
           :zen (etaf-weread--read app :zen)

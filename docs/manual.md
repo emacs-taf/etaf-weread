@@ -13,6 +13,8 @@
 | `RET` in `本地书` | open the selected local book's first chapter |
 | `f` | reading-only layout: the open chapter owns the frame |
 | `F` | cycle the reading font: small, medium (the frame's font), large |
+| `a` | start or stop automatic reading (one line every few seconds) |
+| `y` | look the selected text, or the reading line, up in the dictionary |
 | `[` / `]` | narrow or widen the reading column (more or less inset) |
 | `m` | cycle reading columns: automatic, 1, 2 … as many as fit |
 | `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
@@ -56,6 +58,18 @@ file into chapters and starts reading:
   to the next and previous chapter, `g`/`G` jump to its start and end, `c`
   picks a chapter from the book's own list, and `v` leaves the text for the
   book list;
+- `a` reads for you: one line advances every
+  `etaf-weread-auto-scroll-interval` seconds, the end of a chapter turns to
+  the next one, and the last line of the book stops it; `a` again stops it
+  earlier;
+- `y` looks the selected text, or the line at the top of the visible chapter,
+  up with `etaf-weread-dictionary-function` and shows the definition below the
+  reader: a `youdao-dictionary` with its API key and secret configured wins,
+  and otherwise the macOS system dictionaries answer offline, so a word in an
+  English book is one key away;
+- opening a book reports how long it was read and how many of its chapters
+  were opened (`etaf-weread-reading-stats'), so a long book shows its
+  accumulated time instead of starting from zero every session;
 - `F` cycles the reading font (small, medium, large); a scaled font shows
   fewer rows of the chapter, wraps the text again and shrinks the canvas so
   nothing is cut off at the bottom, and the choice is remembered (leaving the
@@ -71,7 +85,11 @@ file into chapters and starts reading:
 - reopening a book continues where the last session stopped: the chapter is
   restored exactly and the position inside it as a fraction, so a different
   frame size or reading width lands in the same place
-  (`etaf-weread-remember-positions' turns it off).
+  (`etaf-weread-remember-positions' turns it off);
+- the reader also counts reading time and visited chapters per book
+  (`etaf-weread-track-reading-time', default on), reports them in the status
+  line when a book is opened, and keeps them in the settings file where
+  `etaf-weread-reading-stats' returns them.
 
 Only files the person already holds are read; a WeChat Reading title whose text
 lives behind the site's reader still opens in the browser with `o`.

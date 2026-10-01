@@ -67,6 +67,8 @@
     (define-key map (kbd "c") #'etaf-weread--choose-chapter)
     (define-key map (kbd "f") #'etaf-weread--zen)
     (define-key map (kbd "F") #'etaf-weread--cycle-font)
+    (define-key map (kbd "a") #'etaf-weread--auto-scroll)
+    (define-key map (kbd "y") #'etaf-weread--lookup)
     (define-key map (kbd "[") #'etaf-weread--reading-narrower)
     (define-key map (kbd "]") #'etaf-weread--reading-wider)
     (define-key map (kbd "d") #'etaf-weread--detail-pane)
@@ -330,8 +332,9 @@ to the list; otherwise it switches between the book card and its highlights."
     (cond
      ((eq pane 'reader)
       (etaf-weread--write model :pane 'list)
-      ;; Leaving the chapter gives the frame its full canvas back when a
-      ;; scaled reading font had shrunk it.
+      ;; Leaving the chapter stores the reading time and gives the frame its
+      ;; full canvas back when a scaled reading font had shrunk it.
+      (etaf-weread--reading-pause model)
       (etaf-weread--sync-layout model))
      ((eq pane 'list)
       (etaf-weread--write model :pane 'detail)
@@ -544,6 +547,25 @@ chapter far away without turning every chapter in between."
   (interactive)
   (etaf-weread-cycle-reading-font (etaf-weread--current-model)))
 
+(defun etaf-weread--auto-scroll ()
+  "Start or stop automatic reading of the open local chapter."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (if (eq (etaf-weread--effective-pane model) 'reader)
+        (etaf-weread-toggle-auto-scroll model)
+      (etaf-weread--write model :message
+                          "先打开一本本地书（l 本地书 · RET 打开），再按 a 自动阅读"))))
+
+(defun etaf-weread--lookup ()
+  "Look the selected text or the line being read up in the dictionary."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (condition-case error
+        (etaf-weread--write model :message
+                            (format "查词：%s" (etaf-weread-lookup model)))
+      (etaf-weread-error
+       (etaf-weread--write model :message (error-message-string error))))))
+
 (defun etaf-weread--reading-narrower ()
   "Give the reading column two columns more inset."
   (interactive)
@@ -601,7 +623,7 @@ default face shows the reader background there instead of the frame's."
            " · 1/2/3 全部/在读/读完 · n 笔记本"
            " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
            " · 读本地书：j/k 逐行 · SPC 翻页 · g/G 章首尾 · c 选章 · m 单双栏 · f 全屏"
-           " · F 字号 · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
+           " · a 自动滚动 · y 查词 · F 字号 · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points
@@ -767,8 +789,8 @@ the session's timers and pending backend requests."
      :if (not (etaf-weread--read session :zen))
      :hint (if (eq (etaf-weread--effective-pane session) 'reader)
                (if (eq (etaf-weread--read session :layout) 'narrow)
-                   "j/k 逐行 · SPC 翻页 · c 选章 · F 字号"
-                 "j/k 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · F 字号 · [ ] 留白 · T 主题")
+                   "j/k 逐行 · SPC 翻页 · c 选章 · a 自动 · y 查词"
+                 "j/k 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · a 自动 · y 查词 · F 字号 · [ ] 留白 · T 主题")
              etaf-weread--footer-hint)
      :account (etaf-weread--read session :account)
      :summary (etaf-weread--read session :summary)

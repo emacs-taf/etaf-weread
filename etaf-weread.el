@@ -85,8 +85,8 @@
 ;; own font), `:reader-line-height' (one reading row in pixels),
 ;; `:reader-columns' (the width the open chapter is wrapped to), `:reader-rows'
 ;; (one column's height), `:reader-spread', `:reader-shown' (the columns on
-;; screen), `:reader-progress' (percent read), `:zen', `:notes', `:stats',
-;; `:account',
+;; screen), `:reader-progress' (percent read), `:zen', `:auto-scroll' (whether
+;; the reader advances by itself), `:notes', `:stats', `:account',
 ;; `:summary', `:index-query', `:index-syncing', `:theme', `:loading',
 ;; `:error', `:message' and `:viewport-width' (the pixel canvas the reader
 ;; mounts into).  The snapshot copies every value, so mutating it never changes
@@ -282,6 +282,11 @@
 ;; screen.  The reader's `m' key cycles the choice and it is stored in
 ;; `etaf-weread-settings-file'.
 ;;
+;; Variable: etaf-weread-auto-scroll-interval
+;; Seconds auto-scroll waits before advancing one reading line, default 6.
+;; `etaf-weread-toggle-auto-scroll' starts and stops the timer, and the
+;; reader's `a' key toggles it.
+;;
 ;; Variable: etaf-weread-reading-font
 ;; Reading font preset of a local book, `medium' (the default), `small' or
 ;; `large'.
@@ -355,6 +360,68 @@
 ;; keeps its width and stays centered.  A session that is not showing a local
 ;; chapter does nothing, because there is nothing to read in zen, and returns
 ;; nil.  The state belongs to the session, not to the settings file.
+;;
+;; Function: etaf-weread-toggle-auto-scroll (app)
+;;;###autoload (autoload 'etaf-weread-toggle-auto-scroll "etaf-weread" nil t)
+;; Start or stop APP's automatic reading and return the new value.
+;; While it runs, one reading line is advanced every
+;; `etaf-weread-auto-scroll-interval' seconds; the end of a chapter turns to
+;; the next one, and the last line of the book stops it.  A session that is
+;; not showing a local chapter does nothing and returns nil, because there is
+;; nothing to scroll.
+;;
+;; Function: etaf-weread-lookup (app &optional query)
+;;;###autoload (autoload 'etaf-weread-lookup "etaf-weread" nil t)
+;; Look QUERY up with `etaf-weread-dictionary-function' and return the text.
+;; QUERY defaults to the selected text, or while reading to the line at the
+;; top of the visible chapter; `etaf-weread-error' signals when there is
+;; nothing to look up or the backend is missing.
+;;
+;; Function: etaf-weread-youdao-lookup (query)
+;;;###autoload (autoload 'etaf-weread-youdao-lookup "etaf-weread" nil t)
+;; Show QUERY's entry from the `youdao-dictionary' package.
+;; The package's API key and secret must be configured; a missing package
+;; signals `etaf-weread-error' instead of breaking the reader.
+;;
+;; Function: etaf-weread-macos-lookup (query)
+;;;###autoload (autoload 'etaf-weread-macos-lookup "etaf-weread" nil t)
+;; Show QUERY's definition from the macOS system dictionaries.
+;; The lookup reads the definition through the DictionaryServices framework,
+;; so it uses whatever dictionaries the system has and needs no account; a
+;; word the dictionaries do not know, or another system, signals
+;; `etaf-weread-error'.
+;;
+;; Function: etaf-weread-default-lookup (query)
+;;;###autoload (autoload 'etaf-weread-default-lookup "etaf-weread" nil t)
+;; Show QUERY's definition with the best available backend.
+;; A `youdao-dictionary' with credentials configured is used first; elsewhere
+;; the macOS system dictionary serves the lookup, and a machine with neither
+;; signals `etaf-weread-error'.
+;;
+;; Variable: etaf-weread-dictionary-function
+;; Function of one string that shows a dictionary entry for it, defaulting to
+;; `etaf-weread-default-lookup'.  Replace it to use another dictionary backend;
+;; the reader's `y' key passes the selected text or the line at the top of the
+;; visible chapter.
+;;
+;; Variable: etaf-weread-dictionary-buffer-name
+;; Buffer the lookup backends display a definition in, default "*ETAF 词典*".
+;; It opens below the reader without taking its focus.
+;;
+;; Function: etaf-weread-reading-stats (app &optional path)
+;;;###autoload (autoload 'etaf-weread-reading-stats "etaf-weread" nil t)
+;; Return how much APP has read PATH, or its open local book.
+;; The value is a plist with `:path', `:seconds' (total reading time),
+;; `:chapters' (the chapter indices opened, newest first) and `:at' (when it
+;; was last read); a book without a record returns nil.  The record lives in
+;; `etaf-weread-settings-file' and is collected while
+;; `etaf-weread-track-reading-time' is non-nil.
+;;
+;; Variable: etaf-weread-track-reading-time
+;; Whether the reader records how long and how far a local book was read,
+;; default t.  The record holds the total seconds and the chapter indices
+;; opened so far and is what `etaf-weread-reading-stats' reports; leaving the
+;; reading pane or closing the reader flushes it.
 ;;
 ;; Function: etaf-weread-adjust-reading-measure (app delta)
 ;;;###autoload (autoload 'etaf-weread-adjust-reading-measure "etaf-weread" nil t)

@@ -20,6 +20,16 @@ All notable user-visible changes to ETAF Weread.
 - Reading inside a local book has bookmarks (`b`, `B`), an in-book search
   (`/`) that lists every occurrence and jumps to the chosen one, and a
   percentage jump (`%`) that lands where the progress bar promises.
+- `a` turns on automatic reading: one line advances every
+  `etaf-weread-auto-scroll-interval` seconds, the next chapter follows the
+  current one, and the end of the book stops it.
+- `y` looks the selected text or the reading line up and shows the definition
+  below the reader: `youdao-dictionary` when its API credentials are set,
+  otherwise the macOS system dictionaries, through the replaceable
+  `etaf-weread-dictionary-function`.
+- A local book keeps its reading time and visited chapters in the settings
+  file (`etaf-weread-track-reading-time`); the status line reports them when
+  the book is opened and `etaf-weread-reading-stats' returns them.
 - A local book reopens where the last session stopped: the chapter is
   restored exactly and the position inside it as a fraction, so it survives
   a different frame size or reading width.

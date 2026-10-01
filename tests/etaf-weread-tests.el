@@ -966,6 +966,138 @@ fraction, so it survives even a different reading width or frame size."
               (should (= 0 (plist-get state :pane-scroll)))))
         (ignore-errors (delete-file file))))))
 
+(ert-deftest etaf-weread-tests-auto-scroll-advances-turns-and-stops ()
+  "Auto-scroll moves the chapter by itself, turns it and stops at the book end.
+The timer must be bounded by the book and released when it is turned off or
+when there is nothing to scroll, or it would keep moving a closed reader."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((etaf-weread-auto-scroll-interval 0.05)
+           (app (etaf-weread-tests--session))
+           (position (lambda ()
+                       (let ((state (etaf-weread-state app)))
+                         (list (plist-get (plist-get state :local) :index)
+                               (plist-get state :pane-scroll))))))
+      ;; Without an open chapter there is nothing to scroll.
+      (should-not (etaf-weread-toggle-auto-scroll app))
+      (should-not (plist-get (etaf-weread-state app) :auto-scroll))
+      (should (= 3 (etaf-weread-open-local-book
+                    app (expand-file-name "local-a.txt" directory))))
+      (should (eq t (etaf-weread-toggle-auto-scroll app)))
+      (should (eq t (plist-get (etaf-weread-state app) :auto-scroll)))
+      (let ((before (funcall position)))
+        (sleep-for 0.2)
+        (should-not (equal before (funcall position))))
+      ;; The last line of the last chapter stops it instead of scrolling on.
+      (etaf-weread-read-chapter app 3)
+      (sleep-for 0.2)
+      (etaf-weread-scroll-pane app (plist-get (etaf-weread-state app) :pane-total))
+      (sleep-for 0.2)
+      (should-not (plist-get (etaf-weread-state app) :auto-scroll))
+      ;; Turning it off releases the timer: nothing moves afterwards.
+      (etaf-weread-read-chapter app 1)
+      (should (eq t (etaf-weread-toggle-auto-scroll app)))
+      (etaf-weread-scroll-pane app (- (plist-get (etaf-weread-state app) :pane-scroll)))
+      (should-not (etaf-weread-toggle-auto-scroll app))
+      (should-not (plist-get (etaf-weread-state app) :auto-scroll))
+      (sleep-for 0.2)
+      (should (equal '(0 0) (funcall position))))))
+
+(ert-deftest etaf-weread-tests-reading-time-and-chapters-accumulate ()
+  "The reader records how long a local book was read and which chapters.
+The record survives into the next session on the same settings file, and a
+book that was never read has no record."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((file (make-temp-file "weread-reading-" nil ".eld"))
+           (etaf-weread-tests--settings file)
+           (app (etaf-weread-tests--session))
+           (path (expand-file-name "local-a.txt" directory)))
+      (unwind-protect
+          (progn
+            (should-not (etaf-weread-reading-stats app path))
+            (etaf-weread-locate app :local)
+            (etaf-weread-open-local-book app path)
+            (let ((stats (etaf-weread-reading-stats app)))
+              (should (equal path (plist-get stats :path)))
+              (should (equal '(0) (plist-get stats :chapters))))
+            (sleep-for 0.3)
+            (etaf-weread-read-chapter app 2)
+            (let ((stats (etaf-weread-reading-stats app)))
+              (should (> (plist-get stats :seconds) 0.2))
+              (should (equal '(0 1) (seq-sort #'< (plist-get stats :chapters)))))
+            ;; A fresh session on the same file starts from the record.
+            (let ((again (etaf-weread-tests--session)))
+              (etaf-weread-locate again :local)
+              (etaf-weread-open-local-book again path)
+              (let ((stats (etaf-weread-reading-stats again)))
+                (should (> (plist-get stats :seconds) 0.2))
+                (should (equal '(0 1)
+                               (seq-sort #'< (plist-get stats :chapters)))))))
+        (setq etaf-weread-tests--settings nil)
+        (ignore-errors (delete-file file))))))
+
+(ert-deftest etaf-weread-tests-lookup-uses-selection-or-visible-line ()
+  "The dictionary key looks the selected text or the line being read up.
+An explicit query wins, the reading line changes with the scroll, and a
+session with nothing to look up signals instead of calling the backend."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((queries nil)
+           (etaf-weread-dictionary-function
+            (lambda (query) (push query queries)))
+           (app (etaf-weread-tests--session))
+           (buffer (get-buffer-create " *etaf-weread-tests-lookup*")))
+      (unwind-protect
+          (progn
+            ;; Nothing open, and no backend is called.
+            (should-error (etaf-weread-lookup app) :type 'etaf-weread-error)
+            (should-not queries)
+            (etaf-weread-locate app :local)
+            (etaf-weread-open-local-book
+             app (expand-file-name "local-a.txt" directory))
+            ;; The line at the top of the visible chapter is the default.
+            (let* ((state (etaf-weread-state app))
+                   (first (seq-some (lambda (line)
+                                      (let ((text (string-trim
+                                                   (or (plist-get line :text) ""))))
+                                        (unless (string-empty-p text) text)))
+                                    (plist-get state :reader-lines))))
+              (should (equal first (etaf-weread-lookup app)))
+              (should (equal (list first) queries))
+              ;; An explicit query wins over the reading place.
+              (should (equal "单词" (etaf-weread-lookup app "单词")))
+              (should (equal "单词" (car queries)))
+              ;; The top line follows the scroll; a narrower single column
+              ;; makes the short fixture chapter long enough to scroll.
+              (should (= 24 (etaf-weread-adjust-reading-measure app -20)))
+              (should (= 1 (etaf-weread-toggle-reading-spread app)))
+              (etaf-weread-scroll-pane app 2)
+              (should (= 2 (plist-get (etaf-weread-state app) :pane-scroll)))
+              (let ((query (etaf-weread-lookup app)))
+                (should (member query
+                                (mapcar (lambda (line) (plist-get line :text))
+                                        (plist-get (etaf-weread-state app) :reader-lines))))
+                (should-not (equal first query)))
+              ;; A selected region wins over the reading place.
+              (etaf-weread-scroll-pane app -2)
+              (let ((line (seq-some (lambda (entry)
+                                      (let ((text (string-trim
+                                                   (or (plist-get entry :text) ""))))
+                                        (unless (string-empty-p text) text)))
+                                    (plist-get (etaf-weread-state app) :reader-lines))))
+                (etaf-mount buffer (etaf-weread-view app)
+                            (list :viewport-width 1200 :viewport-height 40))
+                (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+                (with-current-buffer buffer
+                  (transient-mark-mode 1)
+                  (goto-char (point-min))
+                  (search-forward line)
+                  (set-mark (match-beginning 0))
+                  (activate-mark))
+                (should (equal line (etaf-weread-lookup app))))))
+        (kill-buffer buffer)))))
+
 (ert-deftest etaf-weread-tests-bookmarks-search-and-percent ()
   "Navigation inside a local book: bookmarks, in-book search and a percent jump.
 A bookmark remembers a place and the same call removes it, search finds every
