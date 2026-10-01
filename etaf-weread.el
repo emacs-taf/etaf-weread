@@ -248,6 +248,19 @@
 ;; The list is what the mounted reader provides to the ETAF UI controls in its
 ;; subtree, so buttons, inputs and progress meters follow the same palette.
 ;;
+;; Function: etaf-weread-library-books (&optional directory)
+;;;###autoload (autoload 'etaf-weread-library-books "etaf-weread" nil nil)
+;; Return every local book under DIRECTORY as plists.
+;; Each plist is (:path :title :author :format :size); DIRECTORY defaults to
+;; `etaf-weread-library-directory', and a missing directory returns nil.
+;;
+;; Function: etaf-weread-library-content (path)
+;;;###autoload (autoload 'etaf-weread-library-content "etaf-weread" nil nil)
+;; Read the local book at PATH and return (:title :author :format :chapters).
+;; CHAPTERS is a list of (:title :text) in reading order, the shape a backend
+;; book reply carries; an unreadable or unsupported file signals
+;; `etaf-weread-error'.
+;;
 ;; Function: etaf-weread-make-client (&key skill-directory node-program timeout)
 ;; Return a client that calls the `weread' backend of SKILL-DIRECTORY.
 ;; NODE-PROGRAM runs the backend script, and TIMEOUT is the seconds a request

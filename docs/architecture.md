@@ -9,6 +9,7 @@
 | `lisp/etaf-weread-service.el` | Backend client: turns requests into `weread` skill command lines and decodes JSON replies. |
 | `lisp/etaf-weread-model.el` | Session state, list/detail/highlight loading, selection, panes, layout fitting and the public actions. |
 | `lisp/etaf-weread-index.el` | Local SQLite index: schema, Data Controller and storage primitives through ETAF DB. |
+| `lisp/etaf-weread-library.el` | Local book library: directory scan and TXT, Markdown and EPUB parsing into backend-shaped chapters. |
 | `lisp/etaf-weread-views.el` | Internal Components that take plain values and callbacks. |
 | `lisp/etaf-weread-app.el` | The `etaf-weread-app` Component, the buffer, the keymap and the reader commands. |
 

@@ -61,6 +61,10 @@ The second book carries an orphan thought, so grouping is observable."
                                             :content "没有划线的想法"
                                             :createTime 102)))))))
 
+(defvar etaf-weread-tests--directory
+  (file-name-directory (or load-file-name buffer-file-name))
+  "Directory of this test file, resolved while it is loaded.")
+
 (defvar etaf-weread-tests--extra-chapters nil
   "Extra chapters the scripted book reports, for tests that need a long pane.")
 
@@ -584,6 +588,43 @@ was, so the reader falls back to the selection the manual promises."
                                            :id)))))
       (when (get-buffer " *etaf-weread-tests-ret*")
         (kill-buffer " *etaf-weread-tests-ret*")))))
+
+(ert-deftest etaf-weread-tests-library-lists-and-parses-local-books ()
+  "The local library lists a directory and reads TXT and EPUB books.
+A local book needs no backend: the directory scan and the file parsers turn
+it into the same chapter shape a book reply uses."
+  (let* ((fixtures (expand-file-name "fixtures" etaf-weread-tests--directory))
+         (directory (make-temp-file "weread-library-" t)))
+    (unwind-protect
+        (progn
+          (dolist (name '("local-a.txt" "local-mini.epub"))
+            (copy-file (expand-file-name name fixtures)
+                       (expand-file-name name directory) t))
+          ;; An unsupported file is written here instead of kept as a fixture.
+          (write-region "not a book" nil (expand-file-name "notes.pdf" directory))
+          (let ((books (etaf-weread-library-books directory)))
+            (should (= 2 (length books)))
+            (should (equal '("epub" "txt")
+                           (sort (mapcar (lambda (book) (plist-get book :format)) books)
+                                 #'string<))))
+          (let* ((content (etaf-weread-library-content
+                           (expand-file-name "local-a.txt" directory)))
+                 (chapters (plist-get content :chapters)))
+            (should (equal "local-a" (plist-get content :title)))
+            (should (= 3 (length chapters)))
+            (should (string-match-p "第一章正文" (plist-get (car chapters) :text)))
+            (should (string-match-p "第三章正文" (plist-get (car (last chapters)) :text))))
+          (let* ((content (etaf-weread-library-content
+                           (expand-file-name "local-mini.epub" directory)))
+                 (chapters (plist-get content :chapters)))
+            (should (= 2 (length chapters)))
+            (should (string-match-p "第一章正文" (plist-get (car chapters) :text)))
+            (should (string-match-p "第二章正文" (plist-get (car (last chapters)) :text))))
+          (should-error (etaf-weread-library-content
+                         (expand-file-name "notes.pdf" directory))
+                        :type 'etaf-weread-error)
+          (should-not (etaf-weread-library-books (expand-file-name "missing" directory))))
+      (delete-directory directory t))))
 
 (ert-deftest etaf-weread-tests-pane-keys-scroll-the-pane ()
   "SPC and M-v scroll a long detail pane from the keyboard.
