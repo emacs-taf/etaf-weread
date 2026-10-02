@@ -283,13 +283,16 @@ The callback is skipped when the request was cancelled."
 (defun etaf-weread--failure (data errors)
   "Return an (:error ...) result built from backend DATA and ERRORS.
 The skill's `message' is the human sentence; `error' is its stable code and is
-only used when the message is missing."
+kept beside the message so callers can throttle a failed refresh."
   (let ((message (or (plist-get data :message)
                      (plist-get data :error)
                      (plist-get data :conclusion)
                      "Backend request failed"))
+        (code (plist-get data :error))
         (hint (or (plist-get data :hint) (string-trim errors))))
     (append (list :error (if (stringp message) message (format "%s" message)))
+            (when (and code (stringp code) (not (string-equal code message)))
+              (list :code code))
             (when (and hint (not (string-empty-p hint))) (list :hint hint)))))
 
 (defun etaf-weread--decode (output)

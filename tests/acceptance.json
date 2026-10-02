@@ -245,6 +245,16 @@
       "name": "etaf-weread-tests-prefetch-warms-lists-and-stops-on-close",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "A mounted reader warms unopened sidebar lists in the background, opens a warmed section without a loading state, and cancels the timer when the buffer is killed."
+    },
+    {
+      "name": "etaf-weread-tests-prefetch-pauses-while-hidden",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A reader whose buffer no window shows pauses background refreshes, and showing it again resumes them."
+    },
+    {
+      "name": "etaf-weread-tests-auth-failure-pauses-refreshes",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A background refresh failing with an auth error pauses the warmer until a foreground load succeeds."
     }
   ]
 }

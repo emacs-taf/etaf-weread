@@ -575,6 +575,73 @@ the timer."
           (should (= 0 (etaf-weread-tests--request-count :shelf))))
       (when (buffer-live-p buffer) (kill-buffer buffer)))))
 
+(ert-deftest etaf-weread-tests-prefetch-pauses-while-hidden ()
+  "A reader no window shows pauses its background refreshes until shown again."
+  (setq etaf-weread-tests--requests nil)
+  (let* ((etaf-weread-prefetch-interval 0.05)
+         (etaf-weread-library-refresh-interval 0.05)
+         (app (etaf-weread-tests--session)))
+    (unwind-protect
+        (let* ((buffer (etaf-weread-open app))
+               (other (get-buffer-create " *etaf-weread-tests-other*")))
+          (etaf-weread-locate app :shelf)
+          (should (etaf-weread-tests--wait
+                   (lambda () (> (etaf-weread-tests--request-count :shelf) 3))))
+          ;; 藏起来：预热停下（等一拍再清账，避免把在途请求算进隐藏期）。
+          (set-window-buffer (get-buffer-window buffer t) other)
+          (accept-process-output nil 0.2)
+          (setq etaf-weread-tests--requests nil)
+          (accept-process-output nil 0.5)
+          (should (= 0 (etaf-weread-tests--request-count :shelf)))
+          ;; 重新显示：预热恢复。
+          (set-window-buffer (get-buffer-window other t) buffer)
+          (should (etaf-weread-tests--wait
+                   (lambda () (> (etaf-weread-tests--request-count :shelf) 0)))))
+      (etaf-weread-close))))
+
+(ert-deftest etaf-weread-tests-auth-failure-pauses-refreshes ()
+  "A refresh that fails because the login expired pauses the warmer for good.
+A successful foreground load clears the pause, so signing in again resumes it."
+  (setq etaf-weread-tests--requests nil)
+  (let* ((etaf-weread-prefetch-interval 0.05)
+         ;; 让已缓存的列表保持新鲜，预热就会去补还没缓存的节（含 :notebook）。
+         (etaf-weread-library-refresh-interval 3600)
+         (fail-auth t)
+         (app nil)
+         (client (lambda (request callback)
+                   ;; 失败分支自己记账：脚本客户端只会记成功的请求。
+                   (if (and fail-auth (eq (plist-get request :op) :notebook))
+                       (progn
+                         (push request etaf-weread-tests--requests)
+                         (funcall callback
+                                  (list :error "微信读书接口错误（登录超时）"
+                                        :hint "pi-skill weread login"
+                                        :code "auth")))
+                     (etaf-weread-tests--client request callback)))))
+    (setq app (etaf-weread-tests--session client))
+    (unwind-protect
+        (progn
+          (etaf-weread-open app)
+          (etaf-weread-locate app :shelf)
+          (should (etaf-weread-tests--wait
+                   (lambda () (> (etaf-weread-tests--request-count :notebook) 0))))
+          ;; 暂停后不再有任何后台刷新（用快照比较，不清理账目）。
+          (accept-process-output nil 0.2)
+          (let ((shelf-before (etaf-weread-tests--request-count :shelf))
+                (notebook-before (etaf-weread-tests--request-count :notebook)))
+            (accept-process-output nil 0.5)
+            (should (= shelf-before (etaf-weread-tests--request-count :shelf)))
+            (should (= notebook-before (etaf-weread-tests--request-count :notebook))))
+          ;; 前台加载成功解除暂停：预热恢复去补未缓存的节。
+          (let ((notebook-before (etaf-weread-tests--request-count :notebook)))
+            (setq fail-auth nil)
+            (etaf-weread-locate app :shelf)
+            (should (etaf-weread-tests--wait
+                     (lambda ()
+                       (> (etaf-weread-tests--request-count :notebook)
+                          notebook-before))))))
+      (etaf-weread-close))))
+
 (ert-deftest etaf-weread-tests-status-hints-fit-their-layout ()
   "Each layout paints its binding hint whole instead of clipping it.
 The wide status bar and the compact tab row choose a hint that fits the

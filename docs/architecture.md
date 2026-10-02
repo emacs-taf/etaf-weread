@@ -146,9 +146,12 @@ timer armed on start (`etaf-weread-prefetch-interval`) asks for one candidate
 at a time — the stalest list, or a list that was never loaded.  A background
 load never sets the loading state, never bumps the list generation a visible
 load owns, and is skipped while the reader is loading or has just opened;
-`etaf-weread--dispose` disarms the cache.  The cache is a display shortcut
-only: the backend reply is still the source of truth, and the skill stays a
-thin data layer (no caching there).
+`etaf-weread--dispose` disarms the cache.  Failed loads report their skill
+error code, so an expired login pauses the warmer until a foreground load
+succeeds and other failures back off; a reader that no window shows pauses the
+warmer as well.  The cache is a display shortcut only: the backend reply is
+still the source of truth, and the skill stays a thin data layer (no caching
+there).
 
 ## Local index
 

@@ -141,7 +141,9 @@ reader exactly where it is (no loading flash, no reset selection).
 
 While the reader is idle, one list at a time is warmed or refreshed in the
 background, so opening a section the account has not visited yet is usually
-instant. `etaf-weread-library-refresh-interval` (default 120 seconds) is how
+instant.  The warmer pauses while the reader's buffer is not on screen, backs
+off after a failure and stops altogether when the account needs a human (an
+expired login), resuming after the next successful load. `etaf-weread-library-refresh-interval` (default 120 seconds) is how
 old a cache may be before the timer refreshes it — lower it for a more current
 sidebar, raise it for fewer requests; set `etaf-weread-prefetch-lists` to nil
 to keep the cache to the sections you actually open, or change

@@ -517,17 +517,18 @@ repaint the whole view for nothing."
 
 (cl-defun etaf-weread--call (app request &key on-ok on-error)
   "Send REQUEST for APP, routing a failure into the visible status line.
-ON-OK receives the reply data and ON-ERROR the failure message.  A client that
+ON-OK receives the reply data; ON-ERROR the failure message, its hint and the
+skill's error code.  A client that
 signals while turning the request into a command is reported like any other
 backend failure, so nothing reaches the caller of a reader action."
   (let ((delivered nil)
-        (fail (lambda (message hint)
+        (fail (lambda (message hint code)
                 (etaf-weread--write app :error message)
                 (etaf-weread--write app :message
                                     (if (and hint (not (string-empty-p hint)))
                                         (format "%s（%s）" message hint)
                                       message))
-                (when on-error (funcall on-error message hint)))))
+                (when on-error (funcall on-error message hint code)))))
     (condition-case error
         (etaf-weread-client-call
          (etaf-weread--client app) request
@@ -538,10 +539,11 @@ backend failure, so nothing reaches the caller of a reader action."
                  (etaf-weread--write app :error nil)
                  (when on-ok (funcall on-ok (cadr result))))
              (funcall fail (or (cadr result) "请求失败")
-                      (plist-get (cddr result) :hint)))))
+                      (plist-get (cddr result) :hint)
+                      (plist-get (cddr result) :code)))))
       (error (if delivered
                  (signal (car error) (cdr error))
-               (funcall fail (error-message-string error) nil))))))
+               (funcall fail (error-message-string error) nil nil))))))
 
 (defun etaf-weread--note (app text)
   "Show TEXT as the reader's status line message."
@@ -1715,6 +1717,7 @@ cache.  `etaf-list-cache' owns that order, the freshness interval and the
 one-at-a-time rule; this function only maps a section to its request."
   (when (and etaf-weread-prefetch-lists
              (not (plist-get app :disposed))
+             (etaf-weread--cache-visible-p app)
              (not (etaf-weread--read app :loading)))
     (let* ((pairs (cl-loop for section in etaf-weread--cached-sections
                            collect (cons (etaf-weread--list-key app section)
@@ -1725,6 +1728,15 @@ one-at-a-time rule; this function only maps a section to its request."
       (when key
         (let ((section (cdr (assq key pairs))))
           (list section key (etaf-weread--list-request app section)))))))
+
+(defun etaf-weread--cache-visible-p (app)
+  "Return non-nil when APP's buffer can be seen, or the session is headless.
+A mounted reader that no window shows pauses its background refreshes: nobody
+is looking at it, so the network and CPU can wait until it is shown again."
+  (let ((buffer (plist-get app :buffer)))
+    (or (null buffer)
+        (and (buffer-live-p buffer)
+             (get-buffer-window buffer t)))))
 
 (defun etaf-weread--prefetch-list (app)
   "Refresh one cached list of APP in the background when one is due.
@@ -1800,6 +1812,7 @@ dropped."
      :on-ok (lambda (data)
               (when background
                 (etaf-list-cache-set-busy cache nil))
+              (etaf-list-cache-note-success cache)
               (let* ((rows (etaf-weread--rows-for app request data))
                      (total (or (etaf-weread--parse-number (plist-get data :total))
                                 (length rows)))
@@ -1829,7 +1842,8 @@ dropped."
                     (when (etaf-weread--pane-shown-p app)
                       (etaf-weread--schedule-detail
                        app (etaf-weread--selected-id app)))))))
-     :on-error (lambda (message _hint)
+     :on-error (lambda (message _hint code)
+                 (etaf-list-cache-note-failure cache code)
                  (when background
                    (etaf-list-cache-set-busy cache nil))
                  (when (and (= generation (plist-get app :generation))
@@ -2033,7 +2047,7 @@ A reply belonging to a superseded book is still cached but never painted."
                                (if (plist-get detail :progress)
                                    (etaf-weread--progress-text (plist-get detail :progress))
                                  "未开始"))))))
-     :on-error (lambda (message _hint)
+     :on-error (lambda (message _hint _code)
                  (when (and (= generation (plist-get app :detail-generation))
                             (equal id (etaf-weread--detail-id app)))
                    (etaf-weread--write app :detail (list :id id :error message))
@@ -2060,7 +2074,7 @@ A reply belonging to a superseded book is still cached but never painted."
                   (etaf-weread--note app (format "「%s」划线与想法：%d 条"
                                                  (or (plist-get notes :title) id)
                                                  (or (plist-get notes :count) 0))))))
-     :on-error (lambda (message _hint)
+     :on-error (lambda (message _hint _code)
                  (when (and (= generation (plist-get app :notes-generation))
                             (equal id (plist-get (etaf-value (etaf-weread--ref app :detail)) :id)))
                    (etaf-weread--write app :notes (list :id id :error message))
@@ -2480,7 +2494,7 @@ dropped.  Return the generation of this run."
                       (etaf-weread--note app "索引已是最新")
                       (when (eq (etaf-weread--read app :section) :index)
                         (etaf-weread--index-reload app)))))))
-     :on-error (lambda (_message _hint)
+     :on-error (lambda (_message _hint _code)
                  (when (= generation (plist-get app :index-generation))
                    (etaf-weread--write app :index-syncing nil))))
     generation))
@@ -2528,7 +2542,7 @@ keeps the skill's rate limit and the progress line honest."
                       (plist-put pending :remaining (cdr remaining))
                       (plist-put pending :done (1+ (plist-get pending :done)))
                       (etaf-weread--index-step app)))
-           :on-error (lambda (message _hint)
+           :on-error (lambda (message _hint _code)
                        (when (= generation (plist-get app :index-generation))
                          (setf (plist-get app :index-pending) nil)
                          (etaf-weread--write app :index-syncing nil)
