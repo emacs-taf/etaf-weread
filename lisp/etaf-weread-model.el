@@ -431,8 +431,6 @@ other Lisp callers."
           :reading-since nil
           :reading-visited nil
           :local-note-id nil
-          :prefetch-timer nil
-          :prefetch-in-flight nil
           :position-timer nil
           :auto-scroll-timer nil
           :disposed nil
@@ -442,7 +440,7 @@ other Lisp callers."
           :detail-generation 0
           :notes-generation 0
           :list-key nil
-          :list-cache (make-hash-table :test 'equal)
+          :list-cache (etaf-list-cache-create :grace 3)
           :detail-cache (make-hash-table :test 'equal)
           :notes-cache (make-hash-table :test 'equal)
           :section (etaf-ref :shelf :name 'etaf-weread-section)
@@ -1709,38 +1707,24 @@ A search section keys on its stored query, so a new keyword is a new list."
   "Sections whose lists live in the session's list cache.
 Search, the local library and the highlight index have their own stores.")
 
-(defun etaf-weread--list-stale-p (entry now)
-  "Return non-nil when cached ENTRY is older than the refresh interval."
-  (and entry
-       (> (- now (or (plist-get entry :at) 0))
-          etaf-weread-library-refresh-interval)))
-
 (defun etaf-weread--cache-candidate (app now)
   "Return the (SECTION KEY REQUEST) to refresh in the background, or nil.
 The stalest cached list comes first; when every cached list is still fresh,
 one list that was never loaded is warmed so opening its section can use the
-cache.  Nothing happens while the reader is loading or has just opened."
+cache.  `etaf-list-cache' owns that order, the freshness interval and the
+one-at-a-time rule; this function only maps a section to its request."
   (when (and etaf-weread-prefetch-lists
              (not (plist-get app :disposed))
-             (not (plist-get app :prefetch-in-flight))
-             (not (etaf-weread--read app :loading))
-             (> (- now (or (plist-get app :started-at) 0)) 3))
-    (let (stale missing)
-      (dolist (section etaf-weread--cached-sections)
-        (let* ((key (etaf-weread--list-key app section))
-               (entry (etaf-weread--list-entry app key)))
-          (cond
-           ((and entry (etaf-weread--list-stale-p entry now)
-                 (or (null stale)
-                     (< (plist-get entry :at)
-                        (plist-get (nth 2 stale) :at))))
-            (setq stale (list section key entry)))
-           ((and (null entry) (null missing))
-            (setq missing (list section key nil))))))
-      (when-let* ((choice (or stale missing)))
-        (list (nth 0 choice)
-              (nth 1 choice)
-              (etaf-weread--list-request app (nth 0 choice)))))))
+             (not (etaf-weread--read app :loading)))
+    (let* ((pairs (cl-loop for section in etaf-weread--cached-sections
+                           collect (cons (etaf-weread--list-key app section)
+                                         section)))
+           (key (etaf-list-cache-next (plist-get app :list-cache)
+                                      (mapcar #'car pairs)
+                                      now etaf-weread-library-refresh-interval)))
+      (when key
+        (let ((section (cdr (assq key pairs))))
+          (list section key (etaf-weread--list-request app section)))))))
 
 (defun etaf-weread--prefetch-list (app)
   "Refresh one cached list of APP in the background when one is due.
@@ -1751,26 +1735,20 @@ section it belongs to and an unchanged reply leaves the page alone."
 
 (defun etaf-weread--schedule-prefetch (app)
   "Arm APP's idle cache refresh, replacing any timer already armed."
-  (when-let* ((timer (plist-get app :prefetch-timer)))
-    (cancel-timer timer)
-    (setf (plist-get app :prefetch-timer) nil))
-  (when (and etaf-weread-prefetch-lists
-             (not (plist-get app :disposed)))
-    (setf (plist-get app :prefetch-timer)
-          (run-at-time etaf-weread-prefetch-interval
-                       etaf-weread-prefetch-interval
-                       (lambda ()
-                         (unless (plist-get app :disposed)
-                           (etaf-weread--prefetch-list app)))))))
+  (when etaf-weread-prefetch-lists
+    (etaf-list-cache-arm (plist-get app :list-cache)
+                         (lambda ()
+                           (unless (plist-get app :disposed)
+                             (etaf-weread--prefetch-list app)))
+                         :interval etaf-weread-prefetch-interval)))
 
 (defun etaf-weread--list-entry (app key)
   "Return APP's cached list for KEY, or nil."
-  (gethash key (plist-get app :list-cache)))
+  (etaf-list-cache-entry (plist-get app :list-cache) key))
 
 (defun etaf-weread--store-list (app key rows total)
   "Cache ROWS and TOTAL for KEY in APP."
-  (puthash key (list :rows rows :total total :at (float-time))
-           (plist-get app :list-cache)))
+  (etaf-list-cache-put (plist-get app :list-cache) key rows total))
 
 (defun etaf-weread--show-cached-list (app key keep-position-p)
   "Show APP's cached rows for KEY when one exists, without a loading state.
@@ -1810,9 +1788,10 @@ dropped."
           (if background
               (plist-get app :generation)
             (setf (plist-get app :generation) (1+ (plist-get app :generation)))))
-         (previous (etaf-weread--list-entry app key)))
+         (cache (plist-get app :list-cache))
+         (previous (etaf-list-cache-entry cache key)))
     (when background
-      (setf (plist-get app :prefetch-in-flight) t))
+      (etaf-list-cache-set-busy cache t))
     (unless background
       (etaf-weread--write app :loading t)
       (etaf-weread--write app :error nil))
@@ -1820,14 +1799,14 @@ dropped."
      app request
      :on-ok (lambda (data)
               (when background
-                (setf (plist-get app :prefetch-in-flight) nil))
+                (etaf-list-cache-set-busy cache nil))
               (let* ((rows (etaf-weread--rows-for app request data))
                      (total (or (etaf-weread--parse-number (plist-get data :total))
                                 (length rows)))
                      (unchanged (and previous
                                      (equal (plist-get previous :rows) rows)
                                      (equal (plist-get previous :total) total))))
-                (etaf-weread--store-list app key rows total)
+                (etaf-list-cache-put cache key rows total)
                 (when (and (= generation (plist-get app :generation))
                            (equal key (plist-get app :list-key)))
                   (if unchanged
@@ -1852,7 +1831,7 @@ dropped."
                        app (etaf-weread--selected-id app)))))))
      :on-error (lambda (message _hint)
                  (when background
-                   (setf (plist-get app :prefetch-in-flight) nil))
+                   (etaf-list-cache-set-busy cache nil))
                  (when (and (= generation (plist-get app :generation))
                             (equal key (plist-get app :list-key))
                             (not background))
@@ -3046,10 +3025,7 @@ keeps the place even when the scroll had not settled yet."
   (when-let* ((timer (plist-get app :follow-timer)))
     (cancel-timer timer)
     (setf (plist-get app :follow-timer) nil))
-  (when-let* ((timer (plist-get app :prefetch-timer)))
-    (cancel-timer timer)
-    (setf (plist-get app :prefetch-timer) nil))
-  (setf (plist-get app :prefetch-in-flight) nil)
+  (etaf-list-cache-disarm (plist-get app :list-cache))
   (etaf-weread--index-dispose app)
   (etaf-weread-cancel (etaf-weread--client app)))
 
