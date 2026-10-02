@@ -1,5 +1,9 @@
 # ETAF Weread manual
 
+`M-x etaf-weread-open` replaces the selected window with the reader.  It does
+not split the frame or defer to `display-buffer` rules; use `etaf-weread-view`
+to embed the reader in another layout.
+
 ## Keys
 
 | Key | Command |

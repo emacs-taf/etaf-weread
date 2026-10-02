@@ -212,6 +212,11 @@
       "purpose": "Opening installs the reader keymap, hides the mode line and paints the shelf; closing kills the buffer."
     },
     {
+      "name": "etaf-weread-tests-open-fills-the-selected-window",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Opening the reader replaces the selected window instead of splitting the frame into a second pane."
+    },
+    {
       "name": "etaf-weread-tests-default-client-runs-the-skill-script",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "The default client runs the skill script with the documented arguments for a shelf filter and for an export with its directory."

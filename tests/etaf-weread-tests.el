@@ -1507,6 +1507,33 @@ them."
       (when (get-buffer " *etaf-weread-tests-keys*")
         (kill-buffer " *etaf-weread-tests-keys*")))))
 
+(ert-deftest etaf-weread-tests-open-fills-the-selected-window ()
+  "Opening the reader replaces the selected window instead of splitting it.
+A native text app owns the whole window it was opened from; a general
+display rule must not turn it into a playground-style pane."
+  (let ((etaf-weread-buffer-name " *etaf-weread-tests-window*")
+        (app (etaf-weread-tests--session))
+        (frame (selected-frame))
+        (width (frame-width))
+        (height (frame-height)))
+    (unwind-protect
+        (save-window-excursion
+          (delete-other-windows)
+          (set-frame-size frame 120 40)
+          (let ((windows (length (window-list)))
+                (selected (selected-window)))
+            (unwind-protect
+                (progn
+                  (etaf-weread-open app)
+                  (should (= (length (window-list)) windows))
+                  (should (eq (selected-window) selected))
+                  (should (eq (window-buffer selected)
+                              (get-buffer etaf-weread-buffer-name))))
+              (etaf-weread-close))))
+      (set-frame-size frame width height)
+      (when (get-buffer etaf-weread-buffer-name)
+        (kill-buffer etaf-weread-buffer-name)))))
+
 (ert-deftest etaf-weread-tests-open-and-close-own-a-buffer ()
   "Opening installs the reader keymap and closing kills the buffer."
   (setq etaf-weread-tests--requests nil)

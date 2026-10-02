@@ -39,9 +39,11 @@
 ;; MODEL defaults to a session from `etaf-weread-create', so the reader opens on
 ;; the shelf with the account of the stored login.  A caller-provided MODEL
 ;; keeps its section, selection and loaded detail, and is revived when it was
-;; displayed before.  The buffer gets `etaf-weread-mode-map' and hides its mode
-;; line; closing the buffer releases the session's timers and pending requests,
-;; so a later `etaf-weread-open' with the same MODEL works again.
+;; displayed before.  It replaces the selected window instead of following
+;; `display-buffer' rules that might split the frame.  The buffer gets
+;; `etaf-weread-mode-map' and hides its mode line; closing the buffer releases
+;; the session's timers and pending requests, so a later `etaf-weread-open'
+;; with the same MODEL works again.
 ;;
 ;; Function: etaf-weread-close ()
 ;;;###autoload (autoload 'etaf-weread-close "etaf-weread" nil t)

@@ -893,7 +893,11 @@ section, selection and loaded detail."
                     table))
       (etaf-weread--remap-canvas-face)
       (use-local-map etaf-weread-mode-map))
-    (pop-to-buffer buffer)
+    ;; A native text app owns the window it was opened from: a general
+    ;; `display-buffer' rule must not split the frame into a playground-style
+    ;; pane, so open in the selected window and let the app fill it.
+    (let ((display-buffer-overriding-action '((display-buffer-same-window))))
+      (pop-to-buffer buffer))
     ;; The layout, page size and viewport come from the window that shows the
     ;; reader, so the first paint already fits it.  The reader adapts to later
     ;; resizes as well (see `etaf-weread--sync-layout').
