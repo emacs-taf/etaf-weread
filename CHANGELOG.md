@@ -4,6 +4,13 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- Sidebar lists are shown from the session cache at once and compared with a
+  fresh reply in the background: an unchanged list never repaints or resets
+  the reader's place, and a mounted reader warms and refreshes one list at a
+  time while idle (`etaf-weread-library-refresh-interval`, default 120
+  seconds; `etaf-weread-prefetch-lists` and `etaf-weread-prefetch-interval`
+  control the timer).
+
 - Local books can be bound to their WeChat Reading account book
   (`pi-skill weread bind set`, or `bind auto --dir ~/ebooks`): the reading head
   shows the account progress beside the local one, the local list shows it as

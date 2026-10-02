@@ -130,6 +130,25 @@ weread skill (JSON over stdout)
   (`etaf-weread-detail-follow-delay`); each book's detail and highlights are
   cached per id, so revisiting is instant.
 
+## List cache and background refresh
+
+Library lists are cached per session under a key that names the section (a
+search keys on its keyword, so another keyword is another list).  Switching a
+section paints the cache synchronously and then compares it with a fresh reply
+in the background; the reply replaces the cache and repaints only when the rows
+or the total differ, so an unchanged sidebar costs one request and no repaint.
+The detail and highlight panes use the same idea per book id.
+
+The refresh policy lives in the model, not in the views: a cached entry carries
+its timestamp, `etaf-weread-library-refresh-interval` decides when it is stale,
+and a timer armed on start (`etaf-weread-prefetch-interval`) asks for one
+candidate at a time — the stalest list, or a list that was never loaded.  A
+background load never sets the loading state, never bumps the list generation a
+visible load owns, and is skipped while the reader is loading or has just
+opened; `etaf-weread--dispose` cancels the timer.  The cache is a display
+shortcut only: the backend reply is still the source of truth, and the skill
+stays a thin data layer (no caching there).
+
 ## Local index
 
 `etaf-weread-index.el` owns one SQLite table (`highlights`) described by

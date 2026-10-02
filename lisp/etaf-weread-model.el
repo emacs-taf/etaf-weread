@@ -121,6 +121,26 @@ passed over, so browsing stays cheap on the network."
   :type 'number
   :group 'etaf-weread)
 
+(defcustom etaf-weread-library-refresh-interval 120
+  "Seconds after which a cached list is refreshed in the background.
+A cached list is shown at once when a section is opened, then compared with a
+fresh reply; the cache is a display shortcut, never the source of truth.  A
+shorter interval keeps the sidebar current at the cost of more requests."
+  :type 'number
+  :group 'etaf-weread)
+
+(defcustom etaf-weread-prefetch-lists t
+  "Whether a mounted reader refreshes sidebar lists while it is idle.
+One list at a time is warmed or refreshed in the background, so switching
+sections shows current data without waiting for the network."
+  :type 'boolean
+  :group 'etaf-weread)
+
+(defcustom etaf-weread-prefetch-interval 15
+  "Seconds between two background list refreshes while the reader is idle."
+  :type 'number
+  :group 'etaf-weread)
+
 (defconst etaf-weread--reading-min-columns 24
   "Narrowest reading column the reader allows.")
 
@@ -411,6 +431,8 @@ other Lisp callers."
           :reading-since nil
           :reading-visited nil
           :local-note-id nil
+          :prefetch-timer nil
+          :prefetch-in-flight nil
           :position-timer nil
           :auto-scroll-timer nil
           :disposed nil
@@ -686,10 +708,12 @@ and a reply from an earlier section is discarded.  Unknown SECTION signals
           (etaf-weread--index-reload app)
       (cond ((eq section :search)
              (when (not (string-empty-p (etaf-weread--read app :query)))
-               (etaf-weread--load-list app key (etaf-weread--list-request app section)
-                                       same-p)))
-              (t (etaf-weread--load-list app key (etaf-weread--list-request app section)
-                                         same-p)))))))
+               (etaf-weread--load-list
+                app key (etaf-weread--list-request app section) same-p
+                (and (etaf-weread--list-entry app key) t))))
+              (t (etaf-weread--load-list
+                  app key (etaf-weread--list-request app section) same-p
+                  (and (etaf-weread--list-entry app key) t))))))))
 
 (defun etaf-weread--show-local-books (app)
   "Fill APP's list with the books under `etaf-weread-library-directory'.
@@ -1659,7 +1683,7 @@ querying the backend."
         (setf (plist-get app :list-key) key)
         (etaf-weread--show-cached-list app key same-p))
       (etaf-weread--load-list app key (etaf-weread--list-request app :search)
-                              same-p))))
+                              same-p (and (etaf-weread--list-entry app key) t)))))
 
 (defun etaf-weread--list-key (app section)
   "Return the cache key of SECTION in APP.
@@ -1679,6 +1703,65 @@ A search section keys on its stored query, so a new keyword is a new list."
     (:index nil)
     (_ (list :op :shelf :filter (etaf-weread--shelf-filter section)
              :limit etaf-weread-list-limit))))
+
+(defconst etaf-weread--cached-sections
+  '(:shelf :reading :finished :notebook :stats)
+  "Sections whose lists live in the session's list cache.
+Search, the local library and the highlight index have their own stores.")
+
+(defun etaf-weread--list-stale-p (entry now)
+  "Return non-nil when cached ENTRY is older than the refresh interval."
+  (and entry
+       (> (- now (or (plist-get entry :at) 0))
+          etaf-weread-library-refresh-interval)))
+
+(defun etaf-weread--cache-candidate (app now)
+  "Return the (SECTION KEY REQUEST) to refresh in the background, or nil.
+The stalest cached list comes first; when every cached list is still fresh,
+one list that was never loaded is warmed so opening its section can use the
+cache.  Nothing happens while the reader is loading or has just opened."
+  (when (and etaf-weread-prefetch-lists
+             (not (plist-get app :disposed))
+             (not (plist-get app :prefetch-in-flight))
+             (not (etaf-weread--read app :loading))
+             (> (- now (or (plist-get app :started-at) 0)) 3))
+    (let (stale missing)
+      (dolist (section etaf-weread--cached-sections)
+        (let* ((key (etaf-weread--list-key app section))
+               (entry (etaf-weread--list-entry app key)))
+          (cond
+           ((and entry (etaf-weread--list-stale-p entry now)
+                 (or (null stale)
+                     (< (plist-get entry :at)
+                        (plist-get (nth 2 stale) :at))))
+            (setq stale (list section key entry)))
+           ((and (null entry) (null missing))
+            (setq missing (list section key nil))))))
+      (when-let* ((choice (or stale missing)))
+        (list (nth 0 choice)
+              (nth 1 choice)
+              (etaf-weread--list-request app (nth 0 choice)))))))
+
+(defun etaf-weread--prefetch-list (app)
+  "Refresh one cached list of APP in the background when one is due.
+The refresh uses the ordinary load path, so a changed reply repaints the
+section it belongs to and an unchanged reply leaves the page alone."
+  (when-let* ((candidate (etaf-weread--cache-candidate app (float-time))))
+    (etaf-weread--load-list app (nth 1 candidate) (nth 2 candidate) t t)))
+
+(defun etaf-weread--schedule-prefetch (app)
+  "Arm APP's idle cache refresh, replacing any timer already armed."
+  (when-let* ((timer (plist-get app :prefetch-timer)))
+    (cancel-timer timer)
+    (setf (plist-get app :prefetch-timer) nil))
+  (when (and etaf-weread-prefetch-lists
+             (not (plist-get app :disposed)))
+    (setf (plist-get app :prefetch-timer)
+          (run-at-time etaf-weread-prefetch-interval
+                       etaf-weread-prefetch-interval
+                       (lambda ()
+                         (unless (plist-get app :disposed)
+                           (etaf-weread--prefetch-list app)))))))
 
 (defun etaf-weread--list-entry (app key)
   "Return APP's cached list for KEY, or nil."
@@ -1715,42 +1798,64 @@ they are already looking at."
                                     (max 0 (- total size)))))
     (etaf-weread--sync-pane-total app)))
 
-(defun etaf-weread--load-list (app key request &optional keep-position-p)
+(defun etaf-weread--load-list
+    (app key request &optional keep-position-p background)
   "Load REQUEST for APP, caching its rows under KEY.
 KEEP-POSITION-P keeps the position of a reload of the list the reader is
-already looking at.  A reply belonging to an earlier load is dropped."
-  (let ((generation (1+ (plist-get app :generation))))
-    (setf (plist-get app :generation) generation)
-    (etaf-weread--write app :loading t)
-    (etaf-weread--write app :error nil)
+already looking at.  BACKGROUND is a refresh the reader did not ask for: it
+shows no loading state, repaints only when the reply differs from the cache,
+and never invalidates a visible load.  A reply belonging to an earlier load is
+dropped."
+  (let* ((generation
+          (if background
+              (plist-get app :generation)
+            (setf (plist-get app :generation) (1+ (plist-get app :generation)))))
+         (previous (etaf-weread--list-entry app key)))
+    (when background
+      (setf (plist-get app :prefetch-in-flight) t))
+    (unless background
+      (etaf-weread--write app :loading t)
+      (etaf-weread--write app :error nil))
     (etaf-weread--call
      app request
      :on-ok (lambda (data)
+              (when background
+                (setf (plist-get app :prefetch-in-flight) nil))
               (let* ((rows (etaf-weread--rows-for app request data))
                      (total (or (etaf-weread--parse-number (plist-get data :total))
-                                (length rows))))
+                                (length rows)))
+                     (unchanged (and previous
+                                     (equal (plist-get previous :rows) rows)
+                                     (equal (plist-get previous :total) total))))
                 (etaf-weread--store-list app key rows total)
                 (when (and (= generation (plist-get app :generation))
                            (equal key (plist-get app :list-key)))
-                  (etaf-batch
-                    (etaf-weread--write app :rows rows)
-                    (etaf-weread--write app :list-total total)
-                    (if keep-position-p
-                        (etaf-weread--clamp-list-position app)
-                      (etaf-weread--write app :selection 0)
-                      (etaf-weread--write app :window-start 0))
-                    (etaf-weread--write app :loading nil)
-                    (etaf-weread--write app :summary
-                                        (etaf-weread--list-summary app request data rows))
-                    (etaf-weread--note app (etaf-weread--list-summary app request data rows)))
-                  (etaf-weread--sync-pane-total app)
-                  ;; The detail pane follows the settled selection; moving
-                  ;; through the list never requests books passed over.
-                  (when (etaf-weread--pane-shown-p app)
-                    (etaf-weread--schedule-detail app (etaf-weread--selected-id app))))))
+                  (if unchanged
+                      ;; 内容没变：只收下新的时间戳，页面保持原样。
+                      (etaf-weread--write app :loading nil)
+                    (etaf-batch
+                      (etaf-weread--write app :rows rows)
+                      (etaf-weread--write app :list-total total)
+                      (if keep-position-p
+                          (etaf-weread--clamp-list-position app)
+                        (etaf-weread--write app :selection 0)
+                        (etaf-weread--write app :window-start 0))
+                      (etaf-weread--write app :loading nil)
+                      (etaf-weread--write app :summary
+                                          (etaf-weread--list-summary app request data rows))
+                      (etaf-weread--note app (etaf-weread--list-summary app request data rows)))
+                    (etaf-weread--sync-pane-total app)
+                    ;; The detail pane follows the settled selection; moving
+                    ;; through the list never requests books passed over.
+                    (when (etaf-weread--pane-shown-p app)
+                      (etaf-weread--schedule-detail
+                       app (etaf-weread--selected-id app)))))))
      :on-error (lambda (message _hint)
+                 (when background
+                   (setf (plist-get app :prefetch-in-flight) nil))
                  (when (and (= generation (plist-get app :generation))
-                            (equal key (plist-get app :list-key)))
+                            (equal key (plist-get app :list-key))
+                            (not background))
                    (etaf-weread--write app :loading nil)
                    (etaf-weread--write app :rows nil)
                    (etaf-weread--write app :list-total 0)
@@ -2915,12 +3020,14 @@ size and pane budgets that belong to the application."
                 (etaf-weread--sync-layout model window)))))))))
 
 (defun etaf-weread--start (app)
-  "Start APP: fit the layout and follow later window resizes.
-The reader polls nothing; WeChat Reading data changes slowly, so a request is
-sent when the account asks for it or when a load is due."
+  "Start APP: fit the layout, follow window resizes and warm the list cache.
+Lists are cached per section and shown at once; a slow background timer
+compares them with fresh replies and repaints only what changed, so the
+sidebar stays current without ever making the reader wait."
   (setf (plist-get app :disposed) nil
         (plist-get app :started-at) (float-time))
   (etaf-weread--sync-layout app)
+  (etaf-weread--schedule-prefetch app)
   (add-hook 'window-size-change-functions #'etaf-weread--window-size-change))
 
 (defun etaf-weread--dispose (app)
@@ -2939,6 +3046,10 @@ keeps the place even when the scroll had not settled yet."
   (when-let* ((timer (plist-get app :follow-timer)))
     (cancel-timer timer)
     (setf (plist-get app :follow-timer) nil))
+  (when-let* ((timer (plist-get app :prefetch-timer)))
+    (cancel-timer timer)
+    (setf (plist-get app :prefetch-timer) nil))
+  (setf (plist-get app :prefetch-in-flight) nil)
   (etaf-weread--index-dispose app)
   (etaf-weread-cancel (etaf-weread--client app)))
 

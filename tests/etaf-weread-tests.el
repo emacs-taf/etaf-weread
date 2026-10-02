@@ -498,6 +498,83 @@ share one file binds `etaf-weread-tests--settings' first."
       (when (get-buffer " *etaf-weread-tests-mount*")
         (kill-buffer " *etaf-weread-tests-mount*")))))
 
+(ert-deftest etaf-weread-tests-cached-list-refreshes-without-a-loading-state ()
+  "A cached list is compared in the background and replaced only when it changed.
+The first visit loads in the foreground; the next visit paints the cache at
+once and refreshes it without a loading state, so the sidebar never flickers;
+a changed reply then replaces the rows."
+  (setq etaf-weread-tests--requests nil)
+  (let* ((app nil)
+         (loading-at-request 'unseen)
+         (client (lambda (request callback)
+                   (when (equal (plist-get request :op) :shelf)
+                     (setq loading-at-request
+                           (plist-get (etaf-weread-state app) :loading)))
+                   (etaf-weread-tests--client request callback))))
+    (setq app (etaf-weread-tests--session client))
+    ;; First visit: a foreground load, with its loading state.
+    (etaf-weread-locate app :shelf)
+    (should (eq loading-at-request t))
+    (should (= 2 (length (plist-get (etaf-weread-state app) :items))))
+    ;; Next visit: cache first, background compare, no loading state.
+    (setq etaf-weread-tests--requests nil
+          loading-at-request 'unseen)
+    (etaf-weread-locate app :reading)
+    (etaf-weread-locate app :shelf)
+    (should (eq loading-at-request nil))
+    (should (= 2 (length (plist-get (etaf-weread-state app) :items))))
+    ;; A changed reply replaces the cached rows.
+    (setq etaf-weread-tests--book-count 3)
+    (unwind-protect
+        (progn
+          (etaf-weread-locate app :reading)
+          (etaf-weread-locate app :shelf)
+          (should (= 3 (length (plist-get (etaf-weread-state app) :items)))))
+      (setq etaf-weread-tests--book-count 2))
+    ;; Re-opening the section that is already shown keeps the reader's place.
+    (etaf-weread-move-selection app 1)
+    (etaf-weread-locate app :shelf)
+    (should (= 1 (plist-get (etaf-weread-state app) :selection)))))
+
+(ert-deftest etaf-weread-tests-prefetch-warms-lists-and-stops-on-close ()
+  "A mounted reader warms unopened lists in the background and stops on close.
+The timer loads a list that was never opened, so opening it later shows cached
+rows and refreshes them without a loading state; killing the buffer cancels
+the timer."
+  (setq etaf-weread-tests--requests nil)
+  (let* ((etaf-weread-prefetch-interval 0.05)
+         ;; 预热的是「还没缓存」的列表；把过期阈值放长，避免过期刷新把预热挤出循环。
+         (etaf-weread-library-refresh-interval 3600)
+         (app nil)
+         (loading-at-request nil)
+         (client (lambda (request callback)
+                   (push (cons (plist-get request :op)
+                               (plist-get (etaf-weread-state app) :loading))
+                         loading-at-request)
+                   (etaf-weread-tests--client request callback)))
+         (buffer (get-buffer-create " *etaf-weread-tests-prefetch*")))
+    (setq app (etaf-weread-tests--session client))
+    (unwind-protect
+        (progn
+          (etaf-mount buffer (etaf-weread-view app)
+                      (list :viewport-width 1200 :viewport-height 40))
+          (etaf-weread-locate app :shelf)
+          (should (etaf-weread-tests--wait
+                   (lambda () (> (etaf-weread-tests--request-count :notebook) 0))))
+          (should (etaf-weread-tests--wait
+                   (lambda () (> (etaf-weread-tests--request-count :stats) 0))))
+          ;; A warmed section opens from its cache, without a loading state.
+          (setq loading-at-request nil)
+          (etaf-weread-locate app :notebook)
+          (should (eq (cdr (assq :notebook loading-at-request)) nil))
+          (should (etaf-weread-tests--wait
+                   (lambda () (plist-get (etaf-weread-state app) :items))))
+          (kill-buffer buffer)
+          (setq etaf-weread-tests--requests nil)
+          (accept-process-output nil 0.3)
+          (should (= 0 (etaf-weread-tests--request-count :shelf))))
+      (when (buffer-live-p buffer) (kill-buffer buffer)))))
+
 (ert-deftest etaf-weread-tests-status-hints-fit-their-layout ()
   "Each layout paints its binding hint whole instead of clipping it.
 The wide status bar and the compact tab row choose a hint that fits the

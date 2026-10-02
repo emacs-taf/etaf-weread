@@ -235,6 +235,16 @@
       "name": "etaf-weread-tests-sync-progress-needs-a-binding",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Syncing a local book without a binding signals and sends no request."
+    },
+    {
+      "name": "etaf-weread-tests-cached-list-refreshes-without-a-loading-state",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A cached list is shown at once and compared in the background without a loading state; a changed reply replaces the rows and the reader keeps its place."
+    },
+    {
+      "name": "etaf-weread-tests-prefetch-warms-lists-and-stops-on-close",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A mounted reader warms unopened sidebar lists in the background, opens a warmed section without a loading state, and cancels the timer when the buffer is killed."
     }
   ]
 }

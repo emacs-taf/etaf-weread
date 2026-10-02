@@ -131,6 +131,23 @@ The detail pane follows the selection after `etaf-weread-detail-follow-delay`
 seconds of quiet, so moving through the list quickly never asks the backend
 about a book that was only passed over. Pressing `RET` loads it immediately.
 
+## List cache and background refresh
+
+Every sidebar list is cached under its own key (a search keys on its keyword).
+Opening a section shows the cached rows at once and compares them with a fresh
+reply in the background, so a section switch never waits for the network; a
+reply that differs repaints the list, and one that did not change leaves the
+reader exactly where it is (no loading flash, no reset selection).
+
+While the reader is idle, one list at a time is warmed or refreshed in the
+background, so opening a section the account has not visited yet is usually
+instant. `etaf-weread-library-refresh-interval` (default 120 seconds) is how
+old a cache may be before the timer refreshes it — lower it for a more current
+sidebar, raise it for fewer requests; set `etaf-weread-prefetch-lists` to nil
+to keep the cache to the sections you actually open, or change
+`etaf-weread-prefetch-interval` (default 15 seconds) to control how often the
+timer looks for work. `g` refreshes the current section in the foreground.
+
 ## Local highlight index
 
 WeChat Reading serves one book's highlights per request. The reader keeps its

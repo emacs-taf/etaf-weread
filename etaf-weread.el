@@ -284,6 +284,26 @@
 ;; above this width, but below `etaf-weread-wide-columns', the reader keeps the
 ;; rail and shows a single pane; below it the sections move into a header strip.
 ;;
+;; Variable: etaf-weread-library-refresh-interval
+;; Seconds after which a cached sidebar list is refreshed in the background,
+;; default 120.
+;; A cached list is shown at once when a section is opened and then compared
+;; with a fresh reply; the interval decides when the idle timer refreshes it.
+;; Lower it for a more current sidebar, raise it for fewer requests.
+;;
+;; Variable: etaf-weread-prefetch-lists
+;; Whether a mounted reader warms and refreshes sidebar lists while idle,
+;; default t.
+;; One list at a time is loaded in the background, so opening a section that
+;; was never visited can paint from the cache.  Nil keeps the cache to the
+;; sections the reader actually opens.
+;;
+;; Variable: etaf-weread-prefetch-interval
+;; Seconds between two background list refreshes while the reader is idle,
+;; default 15.
+;; The timer only looks for work at this rhythm; a list is refreshed when it
+;; is older than `etaf-weread-library-refresh-interval`.
+;;
 ;; Variable: etaf-weread-list-limit
 ;; Rows requested for one list load, default 200.  Backend totals stay distinct
 ;; from loaded counts when the reply is partial.
