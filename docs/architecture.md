@@ -32,8 +32,14 @@ scaled chapter never paints past the window.  A row may be *shorter* than the
 budget — a blank or Latin-only row does not reach the height a CJK row does —
 so the invariant is "taller than the budget", not equality.
 Fallback fonts are common offenders: a symbol can use Sarasa at 18px or Arial
-Unicode at 19px, and a bold symbol can make the row taller still.  Prefer CJK
-glyph icons and leave symbols unbolded.
+Unicode at 19px, and a bold symbol can make the row taller still.  The reader
+uses the shared `etaf-ui-icon' SVG set for its navigation, which is measured
+against the line and never grows a row.
+
+An active or selected state is carried by color, surface and weight, never by
+a prefix glyph.  A `* `-style marker changes the label's width, so every
+switch shifts the whole row or tab strip; the sidebar paints a tinted surface
+with an accent edge, and the shared Tabs button uses its selected variant.
 Validate with `etaf-weread-gui-check` in `scripts/weread-gui-probe.el`: the
 canvas must fit the window, no row may exceed the budgeted row height, and
 every line must fit the body width.

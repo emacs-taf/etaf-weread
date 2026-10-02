@@ -256,7 +256,7 @@
 ;; The section `:index' is shown, so callers can also use `etaf-weread-locate'.
 ;;
 ;; Variable: etaf-weread-sections
-;; Sidebar groups and their sections, as (GROUP-NAME (SECTION LABEL GLYPH) ...).
+;; Sidebar groups and their sections, as (GROUP-NAME (SECTION LABEL ICON) ...).
 ;; Rebind it before mounting a session to show a different catalog of sections;
 ;; each SECTION must also be accepted by `etaf-weread-locate'.
 ;;

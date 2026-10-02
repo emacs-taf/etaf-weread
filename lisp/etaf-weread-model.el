@@ -29,20 +29,21 @@
 
 (defconst etaf-weread-sections
   '((书架
-     (:shelf "全部书架" "书")
-     (:reading "在读" "读")
-     (:finished "读完" "完"))
+     (:shelf "全部书架" list)
+     (:reading "在读" clock)
+     (:finished "读完" check))
     (笔记
-     (:notebook "笔记本" "记")
-     (:index "笔记检索" "查"))
+     (:notebook "笔记本" lyrics)
+     (:index "笔记检索" search))
     (本地
-     (:local "本地书" "本"))
+     (:local "本地书" queue))
     (发现
-     (:search "搜索书城" "搜")
-     (:stats "阅读统计" "计")))
+     (:search "搜索书城" star)
+     (:stats "阅读统计" chart)))
   "Sidebar groups shown by the reader.
-Each group is (GROUP-NAME (SECTION LABEL GLYPH) ...); SECTION keys are accepted
-by `etaf-weread-locate'.")
+Each group is (GROUP-NAME (SECTION LABEL ICON) ...), where ICON names an
+`etaf-ui-icon' in the shared SVG set; SECTION keys are accepted by
+`etaf-weread-locate'.")
 
 (defconst etaf-weread--section-subtitles
   '((:local . "本地文件里的书")

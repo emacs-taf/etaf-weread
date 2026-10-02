@@ -82,10 +82,12 @@ does not pretend to have been started."
 ;;; ---------------------------------------------------------------------------
 
 (etaf-define-component etaf-weread--view-nav-item
-    (&key glyph label active compact on-press)
-  "Render one section entry with GLYPH, LABEL and press callback.
-The whole two-line cell is the click target, but only the text row is painted,
-so a selected entry reads as one highlighted line."
+    (&key icon label active compact on-press)
+  "Render one section entry with ICON, LABEL and press callback.
+ICON names an `etaf-ui-icon' in the shared SVG set, so the rail reads like the
+rest of the catalog instead of using text glyphs.  The whole two-line cell is
+the click target, but only the text row is painted, so a selected entry reads
+as one highlighted line."
   :view
   (flex :width 'stretch :height '(lh 2) :flex-direction 'column
         :role 'button :tab-index 0
@@ -101,11 +103,11 @@ so a selected entry reads as one highlighted line."
           :font-weight (if active 'bold 'normal)
           :border-left (and active
                             (etaf-weread--view-border 'left (etaf-weread-color :accent)))
-      ;; Symbol glyphs have no bold variant on this font chain: bold would
-      ;; fall back to a taller font and make the row exceed the grid.
-      (box :width '(ch 3) :height '(lh 1) :text-align 'center :font-weight 'normal
-           :color (if active (etaf-weread-color :accent) (etaf-weread-color :muted))
-        (text (expr (or glyph ""))))
+      ;; Icons are measured against the row, so a bold variant would only
+      ;; shift their metrics; the active color already carries the state.
+      (etaf-ui-icon :name (or icon 'list) :set 'svg :size 1.0 :min-width 3
+                    :color (if active (etaf-weread-color :accent)
+                             (etaf-weread-color :muted)))
       (box :if (not compact) :flex-grow 1 :flex-basis 'auto :min-width '(ch 0)
            :height '(lh 1) :overflow 'hidden :font-weight (if active 'bold 'normal)
         (text (expr (or label "")))))
@@ -263,7 +265,7 @@ sections instead of repeating the name."
         (text (expr (format "%s" (car group)))))
       (box :if (and (not compact) (not (eq group (car groups)))) :height '(lh 1))
       (etaf-weread--view-nav-item :for (entry (cdr group)) :key (car entry)
-        :glyph (nth 2 entry)
+        :icon (nth 2 entry)
         :label (nth 1 entry)
         :compact compact
         :active (eq (car entry) section)
@@ -285,8 +287,8 @@ header keeps showing the current section's name."
       :background-color (and (eq (car entry) section) (etaf-weread-color :accent-soft))
       :color (if (eq (car entry) section) (etaf-weread-color :accent) (etaf-weread-color :dim))
       :on-press (lambda () (funcall on-locate (car entry)))
-      (box :height '(lh 1)
-        (text (expr (or (nth 2 entry) "")))))))
+      (etaf-ui-icon :name (or (nth 2 entry) 'list) :set 'svg :size 1.0
+                    :min-width 2))))
 
 (etaf-define-component etaf-weread--view-header
     (&key title subtitle query placeholder loading mode compact on-search on-refresh)
