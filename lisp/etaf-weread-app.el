@@ -714,6 +714,9 @@ the session's timers and pending backend requests."
          (etaf-weread--dispose session)))))
   :view
   (flex :flex-direction 'column :width '(vw 100) :height '(vh 100)
+        ;; One clear line above the chrome keeps the header off the window
+        ;; edge; the layout chrome counts this line.
+        :padding-top '(lh 1)
         ;; Rows that show symbol glyphs render a little taller than the frame's
         ;; line height because their fallback font has larger metrics.  Keep the
         ;; last line clear so those extra pixels land in empty space.

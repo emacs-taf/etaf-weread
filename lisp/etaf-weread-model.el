@@ -2559,11 +2559,12 @@ rows than the wide three-column layout."
   (let* ((height (if (and window (window-live-p window))
                      (window-body-height window)
                    (frame-height)))
+         ;; The chrome includes the root's top padding line.
          (chrome (pcase layout
-                   ('narrow 15)
-                   ('medium 13)
-                   (_ 10))))
-    (max 4 (- height chrome))))
+                   ('narrow 16)
+                   ('medium 14)
+                   (_ 11))))
+    (max 1 (- height chrome))))
 
 (defun etaf-weread--pane-rows-for (window layout)
   "Return the content rows of the side pane fitting WINDOW in LAYOUT.
@@ -2572,11 +2573,12 @@ a shorter heading.  A compact layout gives the pane the full body height."
   (let* ((height (if (and window (window-live-p window))
                      (window-body-height window)
                    (frame-height)))
+         ;; The chrome includes the root's top padding line.
          (chrome (pcase layout
-                   ('narrow 15)
-                   ('medium 13)
-                   (_ 14))))
-    (max 3 (- height chrome))))
+                   ('narrow 16)
+                   ('medium 14)
+                   (_ 15))))
+    (max 1 (- height chrome))))
 
 (defun etaf-weread--reader-font-scale (font)
   "Return the size ratio of the reading FONT preset.
