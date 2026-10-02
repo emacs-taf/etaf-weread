@@ -7,6 +7,7 @@ SOURCES += lisp/etaf-weread-library.el
 SOURCES += lisp/etaf-weread-model.el lisp/etaf-weread-views.el lisp/etaf-weread-app.el etaf-weread.el
 SOURCES += $(wildcard examples/*.el)
 SOURCES += scripts/weread-gui-probe.el
+SOURCES += scripts/weread-gui-acceptance.el
 
 .PHONY: compile load check clean structure-check setup-hooks acceptance api-check test
 compile:
