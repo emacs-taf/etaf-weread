@@ -24,6 +24,7 @@
 | `b` / `B` | bookmark the reading place / jump to one of the book's bookmarks |
 | `%` | jump to a percentage of the open local book |
 | `/` | search inside the open book while reading (the store otherwise) |
+| `w` | write the open local book's reading place back to the WeChat Reading account |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |
 | `s` `n` `i` `t` `l` | shelf, notebook, local notes index, statistics, local books |
@@ -68,6 +69,17 @@ file into chapters and starts reading:
   reader: a `youdao-dictionary` with its API key and secret configured wins,
   and otherwise the macOS system dictionaries answer offline, so a word in an
   English book is one key away;
+- a local book can be bound to its account book (`pi-skill weread bind set
+  <file> <书名>`, or `bind auto --dir ~/ebooks`): the reading head then shows
+  the account progress beside the local one (`36% · 云端 12%`), the local book
+  list shows the account progress as the row meter, and the binding pins which
+  account book the highlights are matched from;
+- `w` writes the reading place of the open local book back to the account.  The
+  account endpoint needs the reader's own signature, so the `weread` skill
+  drives the official web reader in the controlled browser; the action asks for
+  confirmation first, reports the account reply in the status line, and the
+  head updates to the number the account reported.  A local file without a
+  binding tells you the `bind set` command instead of guessing;
 - the account's highlights of the same book are matched to the local text
   (`etaf-weread-local-note-matching'): opening a book finds it in the notebook
   by title, keeps the highlights whose text the local edition shares, and

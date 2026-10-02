@@ -215,6 +215,26 @@
       "name": "etaf-weread-tests-default-client-runs-the-skill-script",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "The default client runs the skill script with the documented arguments for a shelf filter and for an export with its directory."
+    },
+    {
+      "name": "etaf-weread-tests-local-binding-shows-account-progress",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A bound local book shows the account progress in the row meter and publishes the binding for the reading head."
+    },
+    {
+      "name": "etaf-weread-tests-local-binding-drives-note-matching",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A binding names the account book, so its highlights are matched without scanning the notebook by title."
+    },
+    {
+      "name": "etaf-weread-tests-sync-progress-writes-the-local-place-back",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "The sync action confirms first, sends the file, chapter, percent and --yes, and refreshes the published binding from the reply."
+    },
+    {
+      "name": "etaf-weread-tests-sync-progress-needs-a-binding",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Syncing a local book without a binding signals and sends no request."
     }
   ]
 }

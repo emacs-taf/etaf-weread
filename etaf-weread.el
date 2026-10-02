@@ -86,7 +86,9 @@
 ;; `:reader-columns' (the width the open chapter is wrapped to), `:reader-rows'
 ;; (one column's height), `:reader-spread', `:reader-shown' (the columns on
 ;; screen), `:reader-progress' (percent read), `:zen', `:auto-scroll' (whether
-;; the reader advances by itself), `:notes', `:stats', `:account',
+;; the reader advances by itself), `:local-bindings' (the account binding of
+;; the open local book and the account progress of every bound local book),
+;; `:notes', `:stats', `:account',
 ;; `:summary', `:index-query', `:index-syncing', `:theme', `:loading',
 ;; `:error', `:message' and `:viewport-width' (the pixel canvas the reader
 ;; mounts into).  The snapshot copies every value, so mutating it never changes
@@ -148,14 +150,15 @@
 ;; Function: etaf-weread-match-local-notes (app &optional refresh)
 ;;;###autoload (autoload 'etaf-weread-match-local-notes "etaf-weread" nil t)
 ;; Match APP's account highlights to its open local book and return them.
-;; The local title is looked up in the notebook and the highlights of the
-;; best match are kept when their text appears in the local chapters, so a
-;; different edition only contributes the passages it shares.  The result is
-;; published as the session state's `:local-notes' and holds `:book-id',
-;; `:title' and `:notes', each note carrying `:id', `:chapter', `:text' and
-;; `:thought'.  REFRESH non-nil fetches again; the requests are asynchronous,
-;; so a nil return means the reply has not arrived yet.  A session without an
-;; open local book signals `etaf-weread-error'.
+;; A binding of the local file names the account book; without one the local
+;; title is looked up in the notebook and the highlights of the best match are
+;; kept when their text appears in the local chapters, so a different edition
+;; only contributes the passages it shares.  The result is published as the
+;; session state's `:local-notes' and holds `:book-id', `:title' and
+;; `:notes', each note carrying `:id', `:chapter', `:text' and `:thought'.
+;; REFRESH non-nil fetches again; the requests are asynchronous, so a nil
+;; return means the reply has not arrived yet.  A session without an open
+;; local book signals `etaf-weread-error'.
 ;;
 ;; Function: etaf-weread-show-local-note (app note)
 ;;;###autoload (autoload 'etaf-weread-show-local-note "etaf-weread" nil t)
@@ -377,6 +380,17 @@
 ;; While a chapter is open the reading pane owns the frame's body in every
 ;; layout, and `etaf-weread-toggle-pane' leaves it for the book card.  A book
 ;; with a stored position continues in that chapter and place.
+;;
+;; Function: etaf-weread-sync-progress (app)
+;;;###autoload (autoload 'etaf-weread-sync-progress "etaf-weread" nil t)
+;; Write APP's reading place of the open local book back to the account.
+;; The account's copy is updated by the official web reader, which the weread
+;; skill drives in the controlled browser because its progress endpoint needs
+;; the reader's own signature; the call asks for confirmation first and
+;; reports the account reply in the status line.  The reading head and the
+;; local rows then show the refreshed account progress.  A local book without
+;; a binding signals `etaf-weread-error'; the function returns non-nil when a
+;; sync was requested.
 ;;
 ;; Function: etaf-weread-read-chapter (app index)
 ;;;###autoload (autoload 'etaf-weread-read-chapter "etaf-weread" nil t)

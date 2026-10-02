@@ -363,10 +363,12 @@ of LINES is dropped, so a short chapter still fills the first column."
                          (seq-subseq lines start end))))
 
 (etaf-define-component etaf-weread--view-reader
-    (&key title lines zen columns spread rows progress font-size)
+    (&key title lines zen columns spread rows progress cloud font-size)
   "Render one local chapter in the reading pane.
 TITLE is the running head (book, chapter number and chapter title) and
-PROGRESS is how far the book is read, in percent.  LINES is the visible part
+PROGRESS is how far the book is read, in percent.  CLOUD, when non-nil, is
+the account's progress of the same book; the head then shows both numbers, so
+reading locally never hides where the account is.  LINES is the visible part
 of the chapter text, wrapped to COLUMNS columns; ROWS lines fit one column and
 SPREAD columns (1 or 2) are shown side by side, so this Component never
 measures text and no line is clipped.  The columns stay centered, which is
@@ -398,7 +400,9 @@ counts the taller rows that a scaled font paints."
              :height '(lh 1) :overflow 'hidden :font-weight 'bold
           (text (expr (or title ""))))
         (box :height '(lh 1) :color (etaf-weread-color :dim)
-          (text (expr (format "%d%%" (or progress 0))))))
+          (text (expr (if cloud
+                           (format "%d%% · 云端 %d%%" (or progress 0) cloud)
+                         (format "%d%%" (or progress 0)))))))
       (box :if (not zen) :height '(lh 1))
       (etaf-weread--view-note
        :if (null lines)

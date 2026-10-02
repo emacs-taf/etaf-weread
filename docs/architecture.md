@@ -73,14 +73,38 @@ frame line heights.  Leaving the chapter restores the full-height canvas.
 ## Local notes overlay
 
 `etaf-weread-match-local-notes` matches the account's highlights to the open
-local book: the notebook is searched for the local title (normalised without
-spaces and punctuation), the best match's highlights are fetched, and each
+local book.  A binding of the local file names the account book directly; only
+without one is the notebook searched for the local title (normalised without
+spaces and punctuation).  The best match's highlights are fetched, and each
 highlight is kept only when its whitespace-free text appears in the local
 chapters, so another edition contributes only the passages it shares.  The
 matches live in the session's `:local-notes`, and the model marks the wrapped
 lines they cover with `:note`, which the reading view paints with the accent
 surface.  Matching is asynchronous like every backend action and runs when a
 local book is opened (`etaf-weread-local-note-matching`).
+
+## Account binding and progress write-back
+
+The account book of a local file is owned by the `weread` skill
+(`bindings.json` in its private data directory), not by the reader: the model
+loads it through the ordinary `:bind` request and keeps the answer in
+`:local-bindings`.  Each entry carries the account book id, its title, and the
+account's progress; the model decorates the local rows with that percent and
+`etaf-weread--cloud-progress` gives the reading head the number beside the
+local one.  Nothing about the binding is cached across the skill's own file, so
+a rebind is visible on the next load.
+
+`etaf-weread-sync-progress` is the only write path.  After the reader confirms,
+the model sends `:sync-progress` with the open file, its chapter title, the
+local percent and `:yes`, and a wider `:timeout` because the skill drives the
+controlled browser: the account's progress endpoint requires the official
+reader's own signature, so a plain HTTP replay is silently dropped and the
+skill opens the reader, jumps to the chapter and reads the account back.  The
+reply's percent and chapter update the published binding, which is what the
+head and the row meter show after a sync.  A file without a binding makes the
+action signal before any request is sent.
+
+## Data flow
 
 ## Data flow
 

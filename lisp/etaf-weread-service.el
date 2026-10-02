@@ -94,6 +94,13 @@ REQUEST is a plist whose `:op' selects one backend operation:
   :search    (:op :search :keyword \"三体\" :count 25)
   :stats     (:op :stats)                               aggregate reading stats
   :export    (:op :export :id \"3300144445\")            write the notes Markdown
+  :bind      (:op :bind)                    bindings and account progress
+  :sync-progress
+       (:op :sync-progress :file … :chapter-title … :percent 37 :yes t)
+                                          write the local place back
+
+A request may carry `:timeout SECONDS' to widen the subprocess deadline for
+one call; `sync-progress' needs it because it drives the controlled browser.
 
 CALLBACK receives exactly one of (:ok DATA), where DATA is the decoded JSON
 plist, or (:error MESSAGE :hint HINT) when the command failed, timed out or
@@ -130,7 +137,8 @@ requests, or 0 when CLIENT is not a subprocess client."
                                    (list :error (error-message-string error)))
                           nil))))
     (when command
-      (etaf-weread--spawn client (car command) (cdr command) callback))))
+      (etaf-weread--spawn client (car command) (cdr command) callback
+                           :timeout (plist-get request :timeout)))))
 
 (defun etaf-weread--client-command (client request)
   "Return the command line for REQUEST as (PROGRAM . ARGUMENTS).
@@ -174,6 +182,20 @@ with `--yes' because the reader asks before calling this function."
          (list "search" keyword "--count"
                (number-to-string (or (plist-get request :count) 25)))))
       (:stats (list "stats"))
+      (:bind (list "bind" "list" "--progress"))
+      (:sync-progress
+       (let ((file (plist-get request :file)))
+         (when (or (null file) (string-empty-p (format "%s" file)))
+           (signal 'etaf-weread-error '("sync-progress needs the local file path")))
+         (append (list "sync-progress" "--file" (format "%s" file))
+                 (when-let* ((title (plist-get request :chapter-title)))
+                   (unless (string-empty-p (format "%s" title))
+                     (list "--chapter-title" (format "%s" title))))
+                 (when-let* ((percent (plist-get request :percent)))
+                   (list "--percent" (number-to-string (round percent))))
+                 (when-let* ((pages (plist-get request :pages)))
+                   (list "--pages" (number-to-string pages)))
+                 (when (plist-get request :yes) (list "--yes")))))
       (:export
        (unless (and id (not (string-empty-p (format "%s" id))))
          (signal 'etaf-weread-error '("export needs a book id")))
@@ -186,12 +208,13 @@ with `--yes' because the reader asks before calling this function."
              etaf-weread-export-directory)
     (list "--out" (expand-file-name etaf-weread-export-directory))))
 
-(cl-defun etaf-weread--spawn (client program arguments callback)
-  "Run PROGRAM with ARGUMENTS for CLIENT; deliver its decoded JSON to CALLBACK."
+(cl-defun etaf-weread--spawn (client program arguments callback &key timeout)
+  "Run PROGRAM with ARGUMENTS for CLIENT; deliver its decoded JSON to CALLBACK.
+TIMEOUT overrides the client's deadline for this call, in seconds."
   (let* ((stdout (generate-new-buffer " *etaf-weread-stdout*"))
          (stderr (generate-new-buffer " *etaf-weread-stderr*"))
          (pending (etaf-weread--pending-create :stdout stdout :stderr stderr))
-         (timeout (etaf-weread--client-timeout client)))
+         (timeout (or timeout (etaf-weread--client-timeout client))))
     (condition-case error
         (setf (etaf-weread--pending-process pending)
               (make-process

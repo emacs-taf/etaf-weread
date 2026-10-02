@@ -441,6 +441,7 @@ other Lisp callers."
           :pane-total (etaf-ref 0 :name 'etaf-weread-pane-total)
           :local (etaf-ref nil :name 'etaf-weread-local)
           :local-notes (etaf-ref nil :name 'etaf-weread-local-notes)
+          :local-bindings (etaf-ref nil :name 'etaf-weread-local-bindings)
           :reader-lines (etaf-ref nil :name 'etaf-weread-reader-lines)
           :reader-title (etaf-ref "" :name 'etaf-weread-reader-title)
           :reader-measure (etaf-ref measure :name 'etaf-weread-reader-measure)
@@ -713,7 +714,8 @@ A local book needs no backend, so the rows appear synchronously."
     (etaf-weread--note
      app (if (file-directory-p directory)
              (format "本地书库：%s（%d 本）" directory (length rows))
-           (format "本地书库目录不存在：%s" directory)))))
+           (format "本地书库目录不存在：%s" directory)))
+    (etaf-weread--local-bindings-load app)))
 
 (defconst etaf-weread--paragraph-indent "    "
   "Indent a Chinese book starts a paragraph with, in columns.
@@ -806,7 +808,8 @@ signals `etaf-weread-error'."
     (etaf-weread--reading-begin app)
     (etaf-weread--reading-note app)
     (when etaf-weread-local-note-matching
-      (etaf-weread-match-local-notes app))
+      (etaf-weread--local-bindings-load
+       app (lambda () (etaf-weread-match-local-notes app))))
     (length chapters)))
 
 (defun etaf-weread--position-record (app)
@@ -1140,13 +1143,88 @@ that spans a wrap point still marks every line it crosses."
                 index (1+ index))))
       (nreverse covered))))
 
+(defun etaf-weread--bindings-from-data (data)
+  "Return the local-book bindings of backend reply DATA as plists.
+Each binding is (:file :book-id :title :source :percent :chapter-idx
+:chapter-offset :reading-time).  PERCENT is the account's progress of the
+bound book, or 0 when the account never opened it."
+  (mapcar
+   (lambda (binding)
+     (let ((progress (plist-get binding :progress)))
+       (list :file (etaf-weread--string (plist-get binding :file))
+             :book-id (etaf-weread--string (plist-get binding :book_id))
+             :title (etaf-weread--string (plist-get binding :title))
+             :source (etaf-weread--string (plist-get binding :source))
+             :percent (etaf-weread--required-number (plist-get progress :percent))
+             :chapter-idx (plist-get progress :chapter_idx)
+             :chapter-offset (plist-get progress :chapter_offset)
+             :reading-time (etaf-weread--required-number (plist-get progress :reading_time)))))
+   (etaf-weread--list (plist-get (etaf-weread--payload data) :bindings))))
+
+(defun etaf-weread--binding-for (app path)
+  "Return APP's binding of the local book at PATH, or nil."
+  (when path
+    (seq-find (lambda (binding)
+                (equal (plist-get binding :file) (etaf-weread--string path)))
+              (etaf-weread--read app :local-bindings))))
+
+(defun etaf-weread--cloud-progress (app)
+  "Return the account progress percent of APP's open local book, or nil."
+  (let* ((path (plist-get (etaf-weread--read app :local) :path))
+         (binding (and path (etaf-weread--binding-for app path)))
+         (percent (plist-get binding :percent)))
+    (and (numberp percent) (> percent 0) percent)))
+
+(defun etaf-weread--apply-local-bindings (app)
+  "Give every bound local row the account's progress of its book.
+Rows keep that percent in `:progress', so the list meter reads as how far the
+account is; a local book without a binding keeps a zero meter."
+  (let ((rows (etaf-weread--read app :rows)))
+    (when (and rows (seq-some (lambda (row) (plist-get row :local)) rows))
+      (etaf-weread--write
+       app :rows
+       (mapcar (lambda (row)
+                 (if (plist-get row :local)
+                     (let* ((binding (etaf-weread--binding-for app (plist-get row :id)))
+                            (copy (copy-sequence row)))
+                       (plist-put copy :progress (or (plist-get binding :percent) 0))
+                       copy)
+                   row))
+               rows)))))
+
+(defun etaf-weread--local-bindings-load (app &optional then)
+  "Load APP's local-book bindings, publish them and decorate the local rows.
+THEN runs after the reply was applied, and also when the request failed, so a
+caller that falls back to title matching is never left waiting."
+  (etaf-weread--call
+   app (list :op :bind)
+   :on-ok (lambda (data)
+            (etaf-weread--write app :local-bindings
+                                (etaf-weread--bindings-from-data data))
+            (etaf-weread--apply-local-bindings app)
+            (when then (funcall then)))
+   :on-error (lambda (&rest _) (when then (funcall then)))))
+
+(defun etaf-weread--publish-local-notes (app book-id title data)
+  "Match DATA's highlights to APP's open local book and publish them."
+  (let* ((notes (etaf-weread--notes-from-data data book-id))
+         (matches (etaf-weread--local-note-matches app notes)))
+    (etaf-weread--write app :local-notes
+                        (list :book-id book-id :title title :notes matches))
+    (etaf-weread--publish-local-chapter app)
+    (etaf-weread--note
+     app (if matches
+             (format "已叠加《%s》的 %d 处划线/想法（N 下一条）" title (length matches))
+           (format "《%s》的笔记与本地文本没有重合" title)))))
+
 (defun etaf-weread-match-local-notes (app &optional refresh)
   "Match APP's account highlights to its open local book and return them.
-The local title is looked up in the notebook and the highlights of the best
-match are kept when their text appears in the local chapters, so a different
-edition only contributes the passages it shares.  The result is published as
-the session state's `:local-notes' and holds `:book-id', `:title' and
-`:notes', each note carrying `:id', `:chapter', `:text' and `:thought'.
+A binding for the local file pins the account book; without one the local
+title is looked up in the notebook and the highlights of the best match are
+kept when their text appears in the local chapters, so a different edition
+only contributes the passages it shares.  The result is published as the
+session state's `:local-notes' and holds `:book-id', `:title' and `:notes',
+each note carrying `:id', `:chapter', `:text' and `:thought'.
 REFRESH non-nil fetches again.  The requests are asynchronous, so a nil
 return means the reply has not arrived yet; a scripted client replies at
 once.  A session without an open local book signals `etaf-weread-error'."
@@ -1155,36 +1233,81 @@ once.  A session without an open local book signals `etaf-weread-error'."
   (when (or refresh (null (etaf-weread--read app :local-notes)))
     (setf (plist-get app :local-note-id) nil)
     (etaf-weread--write app :local-notes (list :book-id nil :title nil :notes nil))
-    (etaf-weread--call
-     app (list :op :notebook)
-     :on-ok (lambda (data)
-              (let* ((request (list :op :notebook))
-                     (rows (etaf-weread--rows-for app request data))
-                     (row (etaf-weread--match-local-title app rows)))
-                (if (null row)
-                    (etaf-weread--note
-                     app (format "微信读书笔记本里没有找到《%s》"
-                                 (or (plist-get (etaf-weread--read app :local) :title)
-                                     "这本书")))
-                  (etaf-weread--call
-                   app (list :op :notes :id (plist-get row :id))
-                   :on-ok (lambda (notes-data)
-                            (let* ((notes (etaf-weread--notes-from-data
-                                           notes-data (plist-get row :id)))
-                                   (matches (etaf-weread--local-note-matches app notes)))
-                              (etaf-weread--write
-                               app :local-notes
-                               (list :book-id (plist-get row :id)
-                                     :title (plist-get row :title)
-                                     :notes matches))
-                              (etaf-weread--publish-local-chapter app)
-                              (etaf-weread--note
-                               app (if matches
-                                       (format "已叠加《%s》的 %d 处划线/想法（N 下一条）"
-                                               (plist-get row :title) (length matches))
-                                     (format "《%s》的笔记与本地文本没有重合"
-                                             (plist-get row :title))))))))))))
+    (let* ((local (etaf-weread--read app :local))
+           (binding (etaf-weread--binding-for app (plist-get local :path))))
+      (if (and binding (not (string-empty-p (or (plist-get binding :book-id) ""))))
+          (let ((book-id (plist-get binding :book-id))
+                (title (or (plist-get binding :title) (plist-get local :title))))
+            (etaf-weread--call
+             app (list :op :notes :id book-id)
+             :on-ok (lambda (data)
+                      (etaf-weread--publish-local-notes app book-id title data))))
+        (etaf-weread--call
+         app (list :op :notebook)
+         :on-ok (lambda (data)
+                  (let* ((request (list :op :notebook))
+                         (rows (etaf-weread--rows-for app request data))
+                         (row (etaf-weread--match-local-title app rows)))
+                    (if (null row)
+                        (etaf-weread--note
+                         app (format "微信读书笔记本里没有找到《%s》"
+                                     (or (plist-get local :title) "这本书")))
+                      (etaf-weread--call
+                       app (list :op :notes :id (plist-get row :id))
+                       :on-ok (lambda (notes-data)
+                                (etaf-weread--publish-local-notes
+                                 app (plist-get row :id) (plist-get row :title)
+                                 notes-data))))))))))
   (etaf-weread--read app :local-notes))
+
+(defun etaf-weread-sync-progress (app)
+  "Write APP's reading place of the open local book back to WeChat Reading.
+The account's copy is updated by the official web reader, which the weread
+skill drives in the controlled browser; this asks for confirmation first.  A
+local book without a binding signals `etaf-weread-error'.  Return non-nil when
+a sync was requested.  The reply refreshes the published binding."
+  (let* ((local (etaf-weread--read app :local))
+         (path (plist-get local :path)))
+    (unless path
+      (signal 'etaf-weread-error '("先打开一本本地书")))
+    (let ((binding (etaf-weread--binding-for app path)))
+      (unless (and binding (not (string-empty-p (or (plist-get binding :book-id) ""))))
+        (signal 'etaf-weread-error
+                (list (format "《%s》还没绑定微信读书；先跑 pi-skill weread bind set"
+                              (or (plist-get local :title) "这本本地书")))))
+      (if (not (y-or-n-p (format "把《%s》的本地进度同步到微信读书？"
+                                 (or (plist-get local :title) "这本本地书"))))
+          (progn (etaf-weread--note app "已取消同步") nil)
+        (let* ((chapters (plist-get local :chapters))
+               (index (or (plist-get local :index) 0))
+               (chapter (nth index chapters))
+               (percent (or (etaf-weread--read app :reader-progress) 0)))
+          (etaf-weread--note app "正在把进度同步到微信读书…")
+          (etaf-weread--call
+           app (list :op :sync-progress :file path
+                     :chapter-title (or (plist-get chapter :title) "")
+                     :percent percent :yes t :timeout 120)
+           :on-ok
+           (lambda (data)
+             (let* ((payload (etaf-weread--payload data))
+                    (cloud (etaf-weread--required-number (plist-get payload :progress)))
+                    (chapter-idx (plist-get payload :chapter_idx)))
+               (etaf-weread--write
+                app :local-bindings
+                (mapcar
+                 (lambda (item)
+                   (if (equal (plist-get item :file) (etaf-weread--string path))
+                       (let ((copy (copy-sequence item)))
+                         (plist-put copy :percent cloud)
+                         (plist-put copy :chapter-idx chapter-idx)
+                         copy)
+                     item))
+                 (etaf-weread--read app :local-bindings)))
+               (etaf-weread--apply-local-bindings app)
+               (etaf-weread--note
+                app (format "已同步到微信读书：第 %s 章 · 云端 %d%%"
+                            (or chapter-idx (1+ index)) cloud)))))
+          t)))))
 
 (defun etaf-weread-show-local-note (app note)
   "Show NOTE in APP and return the chapter it lands in.
@@ -2837,8 +2960,9 @@ reading font preset), `:reader-font-size' (its CSS pixel size, nil for the
 frame's own font), `:reader-line-height' (one reading row in pixels),
 `:reader-columns' (the width the open chapter is wrapped to), `:zen' (whether
 the reading-only layout is on), `:auto-scroll' (whether the reader advances
-by itself), `:local-notes' (the account's highlights matched to the open
-local book), `:notes', `:stats', `:account',
+by itself), `:local-bindings' (the open local book's account binding and the
+account progress of every bound local book), `:local-notes' (the account's
+highlights matched to the open local book), `:notes', `:stats', `:account',
 `:summary', `:theme', `:loading', `:error', `:message' and `:viewport-width'
 (the pixel canvas the reader paints)."
   (let* ((rows (etaf-weread--read app :rows))
@@ -2871,6 +2995,8 @@ local book), `:notes', `:stats', `:account',
           :pane-total (etaf-weread--read app :pane-total)
           :detail (and detail (copy-sequence detail))
           :local (etaf-weread--read app :local)
+          :local-bindings (let ((bindings (etaf-weread--read app :local-bindings)))
+                            (and bindings (mapcar #'copy-sequence bindings)))
           :local-notes (let ((notes (etaf-weread--read app :local-notes)))
                          (and notes (copy-sequence notes)))
           :reader-lines (etaf-weread--read app :reader-lines)

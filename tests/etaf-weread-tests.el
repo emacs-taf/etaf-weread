@@ -32,6 +32,11 @@
 (defvar etaf-weread-tests--book-count 2
   "Number of books the scripted shelf and notebook list.")
 
+(defvar etaf-weread-tests--bindings nil
+  "Local-book bindings the scripted client reports for `:bind'.
+Each entry follows the skill's shape: `:file', `:book_id', `:title' and a
+`:progress' plist with `:percent' and `:chapter_idx'.")
+
 (defun etaf-weread-tests--books (&optional prefix)
   "Return BOOK-COUNT backend books named with PREFIX."
   (cl-loop for index from 1 to etaf-weread-tests--book-count
@@ -116,7 +121,13 @@ The second book carries an orphan thought, so grouping is observable."
                                    :conclusion "读完 0 本 · 在读 1 本 · 累计 1小时13分"
                                    :data (list :top (etaf-weread-tests--books)
                                                :finished nil :reading nil)))
-                     (:export (list :ok t :conclusion "已导出笔记"))))))) 
+                     (:export (list :ok t :conclusion "已导出笔记"))
+                     (:bind (list :ok t
+                                  :data (list :bindings etaf-weread-tests--bindings)))
+                     (:sync-progress
+                      (list :ok t
+                            :data (list :progress 5 :chapter_idx 1
+                                        :chapter_offset 0 :synced t)))))))) 
 
 (defvar etaf-weread-tests--settings nil
   "Settings file the next test session binds, for tests that share one file.")
@@ -1074,6 +1085,93 @@ contain is dropped, `N' walks the matches and a thought is reported."
                            :notes)))
       (should (string-match-p "我的想法"
                               (plist-get (etaf-weread-state app) :message))))))
+
+(defun etaf-weread-tests--binding (path &optional percent)
+  "Return a scripted binding of PATH with PERCENT account progress."
+  (list :file path :book_id "77" :title "local-a" :source "manual"
+        :progress (list :percent (or percent 36) :chapter_idx 3 :reading_time 400)))
+
+(ert-deftest etaf-weread-tests-local-binding-shows-account-progress ()
+  "A bound local book shows the account's progress in the list and the head.
+The binding is resolved by file path, decorates the local row, and the
+session publishes it as `:local-bindings' for the reading head."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((path (expand-file-name "local-a.txt" directory))
+           (etaf-weread-tests--bindings (list (etaf-weread-tests--binding path)))
+           (app (etaf-weread-tests--session)))
+      (etaf-weread-locate app :local)
+      (let ((row (seq-find (lambda (row) (equal path (plist-get row :id)))
+                           (plist-get (etaf-weread-state app) :items))))
+        (should (equal 36 (plist-get row :progress))))
+      (etaf-weread-open-local-book app path)
+      (let* ((state (etaf-weread-state app))
+             (bindings (plist-get state :local-bindings))
+             (binding (car bindings)))
+        (should (= 1 (length bindings)))
+        (should (equal path (plist-get binding :file)))
+        (should (equal "77" (plist-get binding :book-id)))
+        (should (equal 36 (plist-get binding :percent)))
+        (should (equal 3 (plist-get binding :chapter-idx)))))))
+
+(ert-deftest etaf-weread-tests-local-binding-drives-note-matching ()
+  "A binding names the account book, so the notebook is not scanned.
+The highlights of the bound book are matched to the local text through the
+binding instead of a title lookup."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((path (expand-file-name "local-a.txt" directory))
+           (etaf-weread-tests--bindings (list (etaf-weread-tests--binding path)))
+           (app (etaf-weread-tests--session #'etaf-weread-tests--local-notes-client)))
+      (etaf-weread-locate app :local)
+      (etaf-weread-open-local-book app path)
+      (let* ((notes (plist-get (etaf-weread-state app) :local-notes))
+             (matches (plist-get notes :notes)))
+        (should (equal "77" (plist-get notes :book-id)))
+        (should (= 2 (length matches))))
+      (should (= 0 (etaf-weread-tests--request-count :notebook)))
+      (should (equal "77" (plist-get (etaf-weread-tests--request :notes) :id))))))
+
+(ert-deftest etaf-weread-tests-sync-progress-writes-the-local-place-back ()
+  "The sync action confirms first, sends the local place, and refreshes the binding.
+The request carries the open file, its chapter name, the local percent and the
+explicit `:yes' the skill needs before it drives the browser."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((path (expand-file-name "local-a.txt" directory))
+           (etaf-weread-tests--bindings (list (etaf-weread-tests--binding path)))
+           (asked nil)
+           (app (etaf-weread-tests--session)))
+      (etaf-weread-locate app :local)
+      (etaf-weread-open-local-book app path)
+      (cl-letf (((symbol-function 'y-or-n-p)
+                 (lambda (&rest _) (setq asked t) t)))
+        (should (etaf-weread-sync-progress app)))
+      (should asked)
+      (let ((request (etaf-weread-tests--request :sync-progress)))
+        (should (equal path (plist-get request :file)))
+        (should (plist-get request :yes))
+        (should (equal 120 (plist-get request :timeout)))
+        (should (stringp (plist-get request :chapter-title)))
+        (should (numberp (plist-get request :percent))))
+      ;; The account reply refreshes the published binding.
+      (let ((binding (car (plist-get (etaf-weread-state app) :local-bindings))))
+        (should (equal 5 (plist-get binding :percent)))
+        (should (equal 1 (plist-get binding :chapter-idx)))))))
+
+(ert-deftest etaf-weread-tests-sync-progress-needs-a-binding ()
+  "Syncing a local book without a binding signals and keeps the reader intact.
+The account is never touched, and the status line tells the reader how to bind
+the file."
+  (setq etaf-weread-tests--requests nil)
+  (etaf-weread-tests--with-local-books directory
+    (let* ((path (expand-file-name "local-a.txt" directory))
+           (etaf-weread-tests--bindings nil)
+           (app (etaf-weread-tests--session)))
+      (etaf-weread-locate app :local)
+      (etaf-weread-open-local-book app path)
+      (should-error (etaf-weread-sync-progress app) :type 'etaf-weread-error)
+      (should (null (etaf-weread-tests--request :sync-progress))))))
 
 (ert-deftest etaf-weread-tests-reading-time-and-chapters-accumulate ()
   "The reader records how long a local book was read and which chapters.

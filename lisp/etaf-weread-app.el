@@ -61,6 +61,7 @@
     (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
     (define-key map (kbd "v") #'etaf-weread--toggle-pane)
     (define-key map (kbd "b") #'etaf-weread--bookmark)
+    (define-key map (kbd "w") #'etaf-weread--sync-progress)
     (define-key map (kbd "B") #'etaf-weread--bookmarks)
     (define-key map (kbd "%") #'etaf-weread--jump-percent)
     (define-key map (kbd "m") #'etaf-weread--toggle-spread)
@@ -459,6 +460,15 @@ With prefix argument REFRESH, re-fetch books that are already indexed."
       (etaf-weread-error
        (etaf-weread--write model :message (error-message-string error))))))
 
+(defun etaf-weread--sync-progress ()
+  "Write the open local book's reading place back to the WeChat Reading account."
+  (interactive)
+  (let ((model (etaf-weread--current-model)))
+    (condition-case error
+        (etaf-weread-sync-progress model)
+      (etaf-weread-error
+       (etaf-weread--write model :message (error-message-string error))))))
+
 (defun etaf-weread--bookmarks ()
   "Jump to a bookmark of the open local book."
   (interactive)
@@ -660,7 +670,7 @@ default face shows the reader background there instead of the frame's."
            " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
            " · 读本地书：j/k 逐行 · SPC 翻页 · g/G 章首尾 · c 选章 · m 单双栏 · f 全屏"
            " · a 自动滚动 · y 查词 · N 下一条微信笔记 · M 笔记列表 · F 字号"
-           " · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
+           " · w 同步进度到微信读书 · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points
@@ -801,6 +811,7 @@ the session's timers and pending backend requests."
          :title (etaf-weread--read session :reader-title)
          :zen (etaf-weread--read session :zen)
          :progress (etaf-weread--read session :reader-progress)
+         :cloud (etaf-weread--cloud-progress session)
          :columns (etaf-weread--read session :reader-columns)
          :spread (etaf-weread--read session :reader-shown)
          :rows (etaf-weread--read session :reader-rows)

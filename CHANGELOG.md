@@ -4,6 +4,16 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- Local books can be bound to their WeChat Reading account book
+  (`pi-skill weread bind set`, or `bind auto --dir ~/ebooks`): the reading head
+  shows the account progress beside the local one, the local list shows it as
+  the row meter, and the highlights of the bound book are matched without a
+  title guess.
+- `w` writes the reading place of the open local book back to the account; the
+  `weread` skill drives the official web reader for it because the account
+  endpoint needs the reader's own signature.  The action confirms first and
+  reports the account reply in the status line.
+
 - Local reading is a reading mode of its own: an open chapter takes the frame
   body, its text sits in centered columns (as many as the pane holds, up to
   four, or a pinned count via `m`), `[` and `]` adjust the width, `f` turns the
