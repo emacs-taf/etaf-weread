@@ -54,11 +54,44 @@ tabs:
 
 ## Prerequisites
 
-Emacs 29.1 or newer, the `etaf`, `etaf-ui`, `etaf-db` and their Ebox/ECSS
-providers on `load-path`, the built-in SQLite support of Emacs 29+, and the
-`weread` backend skill with Node.js and a stored login.
+| Requirement | Why | Check |
+| --- | --- | --- |
+| Emacs 29.1 or newer | the ETAF runtime and the built-in SQLite support | `emacs --version` |
+| Node.js 22 or newer | runs the backend client | `node --version` |
+| `etaf`, `etaf-ui`, `etaf-db`, `ebox`, `ecss` | the framework; each root entry must be on `load-path` | every checkout is readable |
+| `weread` backend | shelf, notes, login | `pi-skill weread status`, or its `scripts/weread.mjs` exists |
+
+The reader displays what the backend provides: the `weread` skill owns the
+account, the cookie and the highlight index, and the app keeps a local SQLite
+mirror of every highlight it reads.
 
 ## Installation
+
+### 1. System tools
+
+```sh
+brew install node                 # Node.js 22 or newer
+```
+
+Emacs 29.1 or newer is required; its built-in SQLite support stores the local
+highlight index (no external database is needed).
+
+### 2. The `weread` backend
+
+```sh
+pi-skill weread status            # reports a missing login and the next step
+pi-skill weread login             # opens a controlled browser for the QR scan
+```
+
+WeChat Reading only offers QR login, so this step needs the user once.  The
+cookie is stored at `~/.pi/agent/local/skills/weread/auth.json`; later reads go
+straight over HTTP.  When the skill lives elsewhere, point the app at it:
+
+```elisp
+(setq etaf-weread-skill-directory "/path/to/weread")
+```
+
+### 3. The Emacs package
 
 ```elisp
 (add-to-list 'load-path "/path/to/etaf")
@@ -72,10 +105,31 @@ providers on `load-path`, the built-in SQLite support of Emacs 29+, and the
 (global-set-key (kbd "C-c r") #'etaf-weread-open)
 ```
 
-`M-x etaf-weread-open` mounts the reader; `M-x etaf-weread-close` closes it.
-`etaf-weread-skill-directory` points at the backend skill,
-`etaf-weread-index-file` at the local SQLite database, and
-`etaf-weread-theme-mode` selects the palette.
+`M-x etaf-weread-open` mounts the reader in the selected window; `M-x
+etaf-weread-close` closes it.  `etaf-weread-index-file` selects the local
+SQLite file and `etaf-weread-theme-mode` the palette.
+
+### Quick start for an agent
+
+A non-interactive path to a working reader (the QR scan needs the user once):
+
+```sh
+command -v node || brew install node
+SKILL="${ETAF_WEREAD_SKILL_DIR:-$HOME/.pi/agent/shared/skills/weread}"
+test -f "$SKILL/scripts/weread.mjs" || {
+  echo "weread backend not found: $SKILL" >&2; exit 1; }
+pi-skill weread status || pi-skill weread login
+```
+
+```elisp
+;; After adding the repositories to `load-path':
+(require 'etaf-weread)
+(etaf-weread-open)               ; real backend; returns the reader buffer
+```
+
+A missing client or an expired cookie leaves the reader mounted with the
+backend error in its message line; run `pi-skill weread login` (or `g`) and
+retry.
 
 ## Minimal example
 
