@@ -222,6 +222,11 @@
       "purpose": "The default client runs the skill script with the documented arguments for a shelf filter and for an export with its directory."
     },
     {
+      "name": "etaf-weread-tests-skill-refusal-reports-its-own-message",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A refused skill command surfaces the backend's own JSON message, code and hint even though the exit event can arrive before the output; a crash without JSON keeps the exit status."
+    },
+    {
       "name": "etaf-weread-tests-local-binding-shows-account-progress",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "A bound local book shows the account progress in the row meter and publishes the binding for the reading head."

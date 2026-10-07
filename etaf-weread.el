@@ -560,8 +560,11 @@
 ;; REQUEST is a plist starting with `:op' (`:status', `:shelf', `:notebook',
 ;; `:book', `:notes', `:search', `:stats' or `:export').  CALLBACK receives
 ;; `(:ok DATA)' on success and `(:error MESSAGE :hint HINT)' on failure, at
-;; most once.  A client that cannot answer calls it neither; a session that is
-;; disposed by `etaf-weread-cancel' drops late replies.
+;; most once.  A failure the backend explains itself (its JSON `message' and
+;; `error') keeps that message and code; only a crash without a reply falls
+;; back to naming the exit status.  A client that cannot answer calls it
+;; neither; a session that is disposed by `etaf-weread-cancel' drops late
+;; replies.
 ;;
 ;; Function: etaf-weread-cancel (client)
 ;; Cancel CLIENT's pending requests and drop their late replies.

@@ -216,15 +216,21 @@ TIMEOUT overrides the client's deadline for this call, in seconds."
          (pending (etaf-weread--pending-create :stdout stdout :stderr stderr))
          (timeout (or timeout (etaf-weread--client-timeout client))))
     (condition-case error
-        (setf (etaf-weread--pending-process pending)
-              (make-process
-               :name "etaf-weread"
-               :buffer stdout
-               :stderr stderr
-               :command (cons program arguments)
-               :connection-type 'pipe
-               :noquery t
-               :coding 'utf-8-unix))
+        (progn
+          (setf (etaf-weread--pending-process pending)
+                (make-process
+                 :name "etaf-weread"
+                 :buffer stdout
+                 :stderr stderr
+                 :command (cons program arguments)
+                 :connection-type 'pipe
+                 :noquery t
+                 :coding 'utf-8-unix))
+          ;; The stderr pipe is a process of its own; without a sentinel Emacs
+          ;; appends a "Process ... finished" line to its buffer on exit,
+          ;; which is not backend output.
+          (let ((pipe (get-buffer-process stderr)))
+            (when pipe (set-process-sentinel pipe #'ignore))))
       (error
        (kill-buffer stdout)
        (kill-buffer stderr)
@@ -260,12 +266,22 @@ The callback is skipped when the request was cancelled."
       (cancel-timer timer))
     (setf (etaf-weread--client-pending client)
           (delq pending (etaf-weread--client-pending client)))
+    ;; An exited process can still have output in flight: the exit event can
+    ;; arrive before the pipes deliver what the backend wrote, so the JSON
+    ;; reply of a fast failure would be read as empty.  Drain both streams (the
+    ;; pattern the Elisp manual documents) before reading the buffers.
+    (unless cancelled
+      (while (accept-process-output process))
+      (let ((pipe (get-buffer-process stderr)))
+        (while (and pipe (accept-process-output pipe)))))
     (let ((output (with-current-buffer stdout (buffer-string)))
           (errors (with-current-buffer stderr (buffer-string)))
           (status (process-exit-status process)))
       (kill-buffer stdout)
       (kill-buffer stderr)
-      (unless cancelled
+      ;; Re-read the cancellation flag: draining the streams can run a timer
+      ;; that times this request out, which already delivered the failure.
+      (unless (or cancelled (etaf-weread--pending-cancelled pending))
         (funcall callback
                  (if (and (eq (process-status process) 'exit) (zerop status))
                      (let ((data (etaf-weread--decode output)))

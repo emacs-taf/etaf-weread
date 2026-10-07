@@ -1592,5 +1592,42 @@ display rule must not turn it into a playground-style pane."
                                (format "export 42 --yes --json --quiet --out %s" out)))))))
       (delete-directory directory t))))
 
+(ert-deftest etaf-weread-tests-skill-refusal-reports-its-own-message ()
+  "A refused skill command reports the backend's own message.
+The weread skill answers a failure with a JSON object on stdout and a non-zero
+exit, and the exit event can arrive before that output; the reader must drain
+the pipes before reading them.  A crash without JSON keeps the exit status."
+  (let* ((directory (make-temp-file "etaf-weread-refusal-skill-" t))
+         (scripts (expand-file-name "scripts" directory))
+         (script (expand-file-name "weread.mjs" scripts)))
+    (unwind-protect
+        (progn
+          (make-directory scripts t)
+          (with-temp-file script
+            (insert "if (process.argv[2] === 'shelf') {\n"
+                    "  console.log(JSON.stringify({ ok: false, error: 'auth', message: '还没有微信读书登录态', hint: 'pi-skill weread login（打开受控浏览器扫码）' }));\n"
+                    "  process.exit(3);\n"
+                    "}\n"
+                    "console.error('boom');\n"
+                    "process.exit(1);\n"))
+          (let* ((client (etaf-weread-make-client :skill-directory directory :timeout 10))
+                 (ask (lambda (request)
+                        (let (reply)
+                          (etaf-weread-client-call
+                           client request (lambda (result) (setq reply result)))
+                          (should (etaf-weread-tests--wait (lambda () reply)))
+                          reply))))
+            (let ((refusal (funcall ask (list :op :shelf :filter "reading" :limit 20))))
+              (should (eq (car-safe refusal) :error))
+              (should (equal (cadr refusal) "还没有微信读书登录态"))
+              (should (equal (plist-get (cddr refusal) :code) "auth"))
+              (should (equal (plist-get (cddr refusal) :hint)
+                             "pi-skill weread login（打开受控浏览器扫码）")))
+            (let ((crash (funcall ask (list :op :status))))
+              (should (eq (car-safe crash) :error))
+              (should (string-prefix-p "Backend command failed" (cadr crash)))
+              (should (equal (plist-get (cddr crash) :hint) "boom")))))
+      (delete-directory directory t))))
+
 (provide 'etaf-weread-tests)
 ;;; etaf-weread-tests.el ends here
