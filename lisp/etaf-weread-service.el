@@ -268,12 +268,15 @@ The callback is skipped when the request was cancelled."
           (delq pending (etaf-weread--client-pending client)))
     ;; An exited process can still have output in flight: the exit event can
     ;; arrive before the pipes deliver what the backend wrote, so the JSON
-    ;; reply of a fast failure would be read as empty.  Drain both streams (the
-    ;; pattern the Elisp manual documents) before reading the buffers.
+    ;; reply of a fast failure would be read as empty.  A zero timeout reads
+    ;; what is already in the pipes without waiting — the exit means the
+    ;; writer finished, so its bytes are in the kernel buffers — and it avoids
+    ;; the "Blocking call to accept-process-output with quit inhibited"
+    ;; warning a timeout-less wait would print from this sentinel.
     (unless cancelled
-      (while (accept-process-output process))
+      (while (accept-process-output process 0))
       (let ((pipe (get-buffer-process stderr)))
-        (while (and pipe (accept-process-output pipe)))))
+        (while (and pipe (accept-process-output pipe 0)))))
     (let ((output (with-current-buffer stdout (buffer-string)))
           (errors (with-current-buffer stderr (buffer-string)))
           (status (process-exit-status process)))
