@@ -2806,14 +2806,11 @@ clip after a resize or a measure change."
 
 (defun etaf-weread--viewport-options (app window)
   "Return mount viewport options for APP sized for WINDOW, or nil when dead.
-A mount without them paints at Ebox's default size, which clips the footer
-until the first resize.  The width is the window's body width in pixels, not a
-whole number of cells, so the reader's background reaches the window edge; the
-height is APP's canvas line count, which shrinks with a scaled reading font so
-its taller rows do not paint past the window."
+The width follows the window.  The height is APP's canvas line count, which
+shrinks with a scaled reading font so its taller rows do not paint past the
+window."
   (when (and window (window-live-p window))
-    (list :viewport-width (window-body-width window t)
-          :viewport-height (etaf-weread--read app :reader-canvas))))
+    (list :viewport-height (etaf-weread--read app :reader-canvas))))
 
 (defun etaf-weread--refit-canvas (app window)
   "Refit APP's mounted canvas after its row pitch changed.
@@ -2828,7 +2825,7 @@ where it only confirms the framework's own count."
     (when (and window (window-live-p window)
                runtime (etaf-runtime-mounted-p runtime)
                (/= canvas (or (cdr (etaf-runtime-viewport runtime)) 0)))
-      (etaf-runtime-refit runtime (window-body-width window t) canvas))))
+      (etaf-runtime-refit runtime nil canvas))))
 
 (defun etaf-weread--layout-for (columns)
   "Return the layout COLUMNS columns of text can hold.
