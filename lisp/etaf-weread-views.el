@@ -97,7 +97,7 @@ as one highlighted line."
     ;; A callbackless button here would block the cell's inherited keymap.
     (flex :width 'stretch :height '(lh 1) :gap '((lh 0) (ch 1))
           :align-items 'center :padding '((lh 0) (ch 2))
-          :hover-style (etaf-weread--hover-surface)
+          :hover-style (unless active (etaf-weread--hover-surface))
           :background-color (and active (etaf-weread-color :accent-soft))
           :color (if active (etaf-weread-color :ink) (etaf-weread-color :muted))
           :font-weight (if active 'bold 'normal)
@@ -127,7 +127,7 @@ called with INDEX when the row is clicked."
         :color (etaf-weread-color :ink)
         :font-weight (if selected 'bold 'normal)
         :pointer (etaf-weread--item-pointer)
-        :hover-style (etaf-weread--hover-surface)
+        :hover-style (unless selected (etaf-weread--hover-surface))
         :help-echo (format "%s · %s" (or (plist-get row :title) "")
                            (or (plist-get row :author) "打开详情"))
         :on-press (lambda () (funcall press index))
@@ -165,7 +165,7 @@ index scan reads like a page of excerpts."
         :color (etaf-weread-color :ink)
         :font-weight (if selected 'bold 'normal)
         :pointer (etaf-weread--item-pointer)
-        :hover-style (etaf-weread--hover-surface)
+        :hover-style (unless selected (etaf-weread--hover-surface))
         :help-echo (string-join
                     (delq nil
                           (list (plist-get row :text)
@@ -282,7 +282,7 @@ header keeps showing the current section's name."
       :height '(lh 1) :align-items 'center :padding '((lh 0) (ch 1))
       :role 'button :tab-index 0
       :pointer (etaf-weread--item-pointer)
-      :hover-style (etaf-weread--hover-surface)
+      :hover-style (unless (eq (car entry) section) (etaf-weread--hover-surface))
       :help-echo (or (nth 1 entry) "书架")
       :background-color (and (eq (car entry) section) (etaf-weread-color :accent-soft))
       :color (if (eq (car entry) section) (etaf-weread-color :accent) (etaf-weread-color :dim))
