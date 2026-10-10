@@ -4,6 +4,12 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- Opening the minibuffer (`M-x`, a completion popup or the reader's own
+  prompts) no longer shrinks the book list, the reading pane or the pane
+  budgets to the lines the prompt borrows. The reader keeps the layout it
+  committed for the window and returns to the full view unchanged once the
+  prompt closes.
+
 - Sidebar lists are shown from the session cache at once and compared with a
   fresh reply in the background: an unchanged list never repaints or resets
   the reader's place, and a mounted reader warms and refreshes one list at a

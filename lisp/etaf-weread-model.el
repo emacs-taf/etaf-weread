@@ -453,6 +453,7 @@ other Lisp callers."
           :list-total (etaf-ref 0 :name 'etaf-weread-list-total)
           :selection (etaf-ref 0 :name 'etaf-weread-selection)
           :window-start (etaf-ref 0 :name 'etaf-weread-window-start)
+          :window-rows (etaf-ref 0 :name 'etaf-weread-window-rows)
           :page-size (etaf-ref etaf-weread-page-size :name 'etaf-weread-page-size)
           :pane (etaf-ref 'list :name 'etaf-weread-pane)
           :pane-scroll (etaf-ref 0 :name 'etaf-weread-pane-scroll)
@@ -2857,6 +2858,10 @@ changes."
     (etaf-batch
       (etaf-weread--write app :layout layout)
       (etaf-weread--write app :page-size size)
+      (etaf-weread--write app :window-rows
+                          (if (and window (window-live-p window))
+                              (window-body-height window)
+                            (frame-height)))
       (etaf-weread--write app :pane-rows (etaf-weread--pane-rows-for window layout))
       (etaf-weread--write app :reader-font-size font-pixels)
       (etaf-weread--write app :reader-line-height row-height)
@@ -2994,11 +2999,26 @@ publication costs, so apply once the drag settles instead of per event.")
           (run-at-time etaf-weread--resize-settle-delay nil
                        #'etaf-weread--window-size-change-apply))))
 
+(defun etaf-weread--transient-space-borrow-p (frame window app)
+  "Whether FRAME's transient UI borrows WINDOW's lines from APP's layout.
+An active minibuffer or completion popup takes lines from displayed windows
+without the user resizing the frame; the reader keeps the layout it
+committed, exactly as the canvas keeps its committed viewport.  Window
+growth is real geometry and always applies.  A shorter window with no
+transient UI above it is a real resize too."
+  (let ((minibuffer (active-minibuffer-window)))
+    (and minibuffer
+         (eq (window-frame minibuffer) frame)
+         (< (window-body-height window)
+            (or (etaf-weread--read app :window-rows) 0)))))
+
 (defun etaf-weread--window-size-change-apply ()
   "Adapt every mounted reader to its window's settled size.
 The canvas refit itself is the framework's job: ETAF refits every mounted
 runtime once a resize settles.  This only recomputes the reader layout, page
-size and pane budgets that belong to the application."
+size and pane budgets that belong to the application.  A window whose lines
+an active minibuffer borrows keeps the layout the reader already committed
+until that UI releases them."
   (setq etaf-weread--resize-timer nil)
   (let ((frames (prog1 (nreverse etaf-weread--resize-frames)
                   (setq etaf-weread--resize-frames nil))))
@@ -3009,7 +3029,8 @@ size and pane budgets that belong to the application."
             (when (and (buffer-live-p buffer)
                        (buffer-local-value 'etaf-weread--model buffer))
               (let ((model (buffer-local-value 'etaf-weread--model buffer)))
-                (etaf-weread--sync-layout model window)))))))))
+                (unless (etaf-weread--transient-space-borrow-p frame window model)
+                  (etaf-weread--sync-layout model window))))))))))
 
 (defun etaf-weread--start (app)
   "Start APP: fit the layout, follow window resizes and warm the list cache.
