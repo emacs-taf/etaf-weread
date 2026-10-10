@@ -2999,19 +2999,6 @@ publication costs, so apply once the drag settles instead of per event.")
           (run-at-time etaf-weread--resize-settle-delay nil
                        #'etaf-weread--window-size-change-apply))))
 
-(defun etaf-weread--transient-space-borrow-p (frame window app)
-  "Whether FRAME's transient UI borrows WINDOW's lines from APP's layout.
-An active minibuffer or completion popup takes lines from displayed windows
-without the user resizing the frame; the reader keeps the layout it
-committed, exactly as the canvas keeps its committed viewport.  Window
-growth is real geometry and always applies.  A shorter window with no
-transient UI above it is a real resize too."
-  (let ((minibuffer (active-minibuffer-window)))
-    (and minibuffer
-         (eq (window-frame minibuffer) frame)
-         (< (window-body-height window)
-            (or (etaf-weread--read app :window-rows) 0)))))
-
 (defun etaf-weread--window-size-change-apply ()
   "Adapt every mounted reader to its window's settled size.
 The canvas refit itself is the framework's job: ETAF refits every mounted
@@ -3029,7 +3016,8 @@ until that UI releases them."
             (when (and (buffer-live-p buffer)
                        (buffer-local-value 'etaf-weread--model buffer))
               (let ((model (buffer-local-value 'etaf-weread--model buffer)))
-                (unless (etaf-weread--transient-space-borrow-p frame window model)
+                (unless (etaf-transient-space-borrowed-p
+                         window (etaf-weread--read model :window-rows))
                   (etaf-weread--sync-layout model window))))))))))
 
 (defun etaf-weread--start (app)

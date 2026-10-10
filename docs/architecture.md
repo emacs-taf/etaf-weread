@@ -17,9 +17,9 @@ Only the framework is used: the application never calls the renderer directly.
 A window change adapts the layout through the model, and ETAF refits the canvas
 of every mounted runtime once a resize settles; the reader holds no direct Ebox
 or ECSS reference.  Lines borrowed by an active minibuffer or completion popup
-are not a window change: the reader keeps the layout it committed until the
-prompt closes, matching the canvas, which Ebox leaves at its committed
-viewport.
+are not a window change (`etaf-transient-space-borrowed-p'): the reader keeps
+the layout it committed until the prompt closes, like the canvas, which Ebox
+leaves at its committed viewport.
 
 The layout breakpoints are derived, not chosen: the wide threshold is the
 sidebar plus the pane plus the columns a full book row needs, so a frame can
