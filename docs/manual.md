@@ -37,7 +37,7 @@ to embed the reader in another layout.
 | `I` | index the notebook's highlights into the local database |
 | `g` | reload the current list, account and statistics |
 | `T` | switch to the next palette (dark, light, sepia) |
-| `?` | key summary in the echo area |
+| `C-c h` | key summary in the echo area |
 | `q` | close the reader |
 
 In the local index section the search field filters the indexed highlights

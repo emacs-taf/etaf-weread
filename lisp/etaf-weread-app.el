@@ -96,7 +96,7 @@
     (define-key map (kbd "g") #'etaf-weread--refresh)
     (define-key map (kbd "G") #'etaf-weread--last-item)
     (define-key map (kbd "T") #'etaf-weread--cycle-theme)
-    (define-key map (kbd "?") #'etaf-weread--help)
+    (define-key map (kbd "C-c h") #'etaf-weread--help)
     (define-key map (kbd "q") #'etaf-weread-close)
     map)
   "Keymap of the buffer opened by `etaf-weread-open'.
