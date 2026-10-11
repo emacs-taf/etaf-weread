@@ -41,12 +41,8 @@
 
 (defvar etaf-weread-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "j") #'etaf-weread--next-item)
-    (define-key map (kbd "k") #'etaf-weread--previous-item)
     (define-key map (kbd "C-n") #'etaf-weread--next-item)
     (define-key map (kbd "C-p") #'etaf-weread--previous-item)
-    (define-key map (kbd "<down>") #'etaf-weread--next-item)
-    (define-key map (kbd "<up>") #'etaf-weread--previous-item)
     ;; The event position chooses between the book list and the side pane.
     (define-key map (kbd "<wheel-up>") #'etaf-weread--wheel-up)
     (define-key map (kbd "<wheel-down>") #'etaf-weread--wheel-down)
@@ -81,7 +77,7 @@
     (define-key map (kbd "s") #'etaf-weread--shelf)
     (define-key map (kbd "n") #'etaf-weread--notebook)
     (define-key map (kbd "i") #'etaf-weread--index-section)
-    (define-key map (kbd "l") #'etaf-weread--local-books)
+    (define-key map (kbd "L") #'etaf-weread--local-books)
     (define-key map (kbd "I") #'etaf-weread--build-index)
     (define-key map (kbd "t") #'etaf-weread--stats)
     (define-key map (kbd "/") #'etaf-weread--search)
@@ -101,8 +97,18 @@
     map)
   "Keymap of the buffer opened by `etaf-weread-open'.
 It keeps Ebox's TAB focus cycling and RET activation, and replaces the
-scrolling keys with reader commands: j/k move the selection, v switches the
-side pane, and o opens the selected book in the browser.")
+scrolling keys with reader commands: the arrows move the selection or
+scroll the chapter, v switches the side pane, and o opens the selected book
+in the browser.")
+
+(defun etaf-weread--direction (direction)
+  "Move the Weread selection or scroll the chapter with DIRECTION.
+Point stays where it was, so a following RET keeps falling back to the
+selection the reader promises instead of a row under a revealed point."
+  (pcase direction
+    ('down (save-excursion (etaf-weread--next-item)) 'handled)
+    ('up (save-excursion (etaf-weread--previous-item)) 'handled)
+    (_ 'release)))
 
 (defvar etaf-weread--command-maps
   (list (cons 'etaf-weread--model
@@ -714,6 +720,7 @@ the session's timers and pending backend requests."
          (etaf-weread--dispose session)))))
   :view
   (flex :flex-direction 'column :width '(vw 100) :height '(vh 100)
+        :ref 'weread-root
         ;; One clear line above the chrome keeps the header off the window
         ;; edge; the layout chrome counts this line.
         :padding-top '(lh 1)
@@ -721,6 +728,7 @@ the session's timers and pending backend requests."
         ;; line height because their fallback font has larger metrics.  Keep the
         ;; last line clear so those extra pixels land in empty space.
         :padding-bottom '(lh 1)
+        :on-direction #'etaf-weread--direction
         :color (etaf-weread-color :ink) :bgcolor (etaf-weread-color :bg)
     (flex :width 'stretch :flex-grow 1 :flex-basis 'auto :min-height '(lh 0)
           :align-items 'stretch

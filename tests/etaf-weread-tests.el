@@ -744,7 +744,7 @@ was, so the reader falls back to the selection the manual promises."
     (unwind-protect
         (let ((buffer (etaf-weread-open app)))
           (with-current-buffer buffer
-            (execute-kbd-macro "j")
+            (execute-kbd-macro (kbd "<down>"))
             (should (= 1 (plist-get (etaf-weread-state app) :selection)))
             (execute-kbd-macro (kbd "RET"))
             (should (eq 'detail (plist-get (etaf-weread-state app) :pane)))

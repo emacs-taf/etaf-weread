@@ -215,7 +215,7 @@ repaints, which is what a person feels as jank."
     (etaf-weread-gui-acceptance--keys "jj" 0.2)
     (etaf-weread-gui-acceptance--check "j moves down"
                                        (= 2 (plist-get (etaf-weread-gui-acceptance--state) :selection)))
-    (etaf-weread-gui-acceptance--keys "k" 0.2)
+    (etaf-weread-gui-acceptance--keys "<up>" 0.2)
     (etaf-weread-gui-acceptance--check "k moves up"
                                        (= 1 (plist-get (etaf-weread-gui-acceptance--state) :selection)))
     (etaf-weread-gui-acceptance--keys "<end>" 0.2)
@@ -235,7 +235,7 @@ repaints, which is what a person feels as jank."
 
   ;; Sections and filters (real reloads).
   (dolist (case '(("s" . :shelf) ("2" . :reading) ("3" . :finished)
-                  ("4" . :notebook) ("6" . :stats) ("7" . :index) ("l" . :local)))
+                  ("4" . :notebook) ("6" . :stats) ("7" . :index) ("L" . :local)))
     (etaf-weread-gui-acceptance--step (format "section %s" (car case))
       (etaf-weread-gui-acceptance--keys (car case) 0.3)
       (etaf-weread-gui-acceptance--wait
@@ -333,7 +333,7 @@ repaints, which is what a person feels as jank."
 
 (defun etaf-weread-gui-acceptance--read-local (title)
   "Open the local book whose row contains TITLE through the real keys."
-  (etaf-weread-gui-acceptance--keys "l" 0.5)
+  (etaf-weread-gui-acceptance--keys "L" 0.5)
   (etaf-weread-gui-acceptance--wait
    (lambda () (> (or (plist-get (etaf-weread-gui-acceptance--state) :rows-total) 0) 0)) 15)
   (etaf-weread-gui-acceptance--select-row
@@ -369,7 +369,7 @@ multi-chapter 断舍离 gives the chapter keys a real table of contents."
                                        (format "scroll=%s"
                                                (plist-get (etaf-weread-gui-acceptance--state)
                                                           :pane-scroll)))
-    (etaf-weread-gui-acceptance--keys "k" 0.2)
+    (etaf-weread-gui-acceptance--keys "<up>" 0.2)
     (etaf-weread-gui-acceptance--check "k scrolls back"
                                        (= 4 (plist-get (etaf-weread-gui-acceptance--state)
                                                        :pane-scroll))
@@ -645,8 +645,8 @@ flush it triggers, which is what a person waits for between two repaints."
     (etaf-weread-gui-acceptance--keys "v" 0.4)
     (etaf-weread-gui-acceptance--keys "s" 0.4)
     (etaf-weread-gui-acceptance--keys "<home>" 0.3)
-    (etaf-weread-gui-acceptance--press-cost "shelf selection" "j" 8)
-    (etaf-weread-gui-acceptance--stall "shelf selection" 1.6 "j"))
+    (etaf-weread-gui-acceptance--press-cost "shelf selection" "<down>" 8)
+    (etaf-weread-gui-acceptance--stall "shelf selection" 1.6 "<down>"))
   (etaf-weread-gui-acceptance--step "smooth section switch"
     (etaf-weread-gui-acceptance--timed "section switch"
       (etaf-weread-gui-acceptance--keys "4" 0.5))
@@ -656,8 +656,8 @@ flush it triggers, which is what a person waits for between two repaints."
   (etaf-weread-gui-acceptance--step "smooth chapter scroll"
     (etaf-weread-gui-acceptance--read-local "Vue.js设计与实现")
     (etaf-weread-gui-acceptance--keys "g" 0.2)
-    (etaf-weread-gui-acceptance--press-cost "chapter scroll" "j" 8)
-    (etaf-weread-gui-acceptance--stall "chapter scroll" 1.6 "j")))
+    (etaf-weread-gui-acceptance--press-cost "chapter scroll" "<down>" 8)
+    (etaf-weread-gui-acceptance--stall "chapter scroll" 1.6 "<down>")))
 
 (defun etaf-weread-gui-acceptance--close ()
   "Close the reader and check the buffer is gone."

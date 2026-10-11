@@ -8,7 +8,7 @@ to embed the reader in another layout.
 
 | Key | Command |
 | --- | --- |
-| `j` / `k`, `C-n` / `C-p`, arrows | move the book selection |
+| `↑` / `↓`, `C-n` / `C-p` | move the book selection |
 | wheel | select a book, or scroll the detail/highlight pane over it |
 | `RET`, double click | open the selected book (detail, or highlights in the notebook) |
 | `v` | switch the side pane between detail and highlights |
@@ -22,7 +22,7 @@ to embed the reader in another layout.
 | `N` / `M` | jump to the next matched WeChat highlight / choose one from a list |
 | `[` / `]` | narrow or widen the reading column (more or less inset) |
 | `m` | cycle reading columns: automatic, 1, 2 … as many as fit |
-| `j` / `k`, `↑` / `↓`, wheel | scroll the chapter line by line |
+| `↑` / `↓`, wheel | scroll the chapter line by line |
 | `g` / `G` | top / end of the open chapter |
 | `c` | jump to a chapter of the open local book |
 | `b` / `B` | bookmark the reading place / jump to one of the book's bookmarks |
@@ -31,7 +31,7 @@ to embed the reader in another layout.
 | `w` | write the open local book's reading place back to the WeChat Reading account |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |
-| `s` `n` `i` `t` `l` | shelf, notebook, local notes index, statistics, local books |
+| `s` `n` `i` `t` `L` | shelf, notebook, local notes index, statistics, local books |
 | `1`–`7` | the sidebar sections in order |
 | `/` or `S` | search the WeChat Reading store |
 | `I` | index the notebook's highlights into the local database |
@@ -59,7 +59,7 @@ file into chapters and starts reading:
   so on, and the choice is remembered as well;
 - Chinese paragraphs start with the two-character indent while the chapter
   heading stays flush, and the running head reports how far the book is read;
-- `j`/`k` (also the arrows and the wheel) scroll line by line, `C-v`/`M-v` and
+- `↑`/`↓` and the wheel scroll line by line, `C-v`/`M-v` and
   `SPC`/`S-SPC` scroll a page (both columns at once), `<next>`/`<prior>` turn
   to the next and previous chapter, `g`/`G` jump to its start and end, `c`
   picks a chapter from the book's own list, and `v` leaves the text for the
