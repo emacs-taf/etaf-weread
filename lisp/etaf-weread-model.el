@@ -27,6 +27,13 @@
 (require 'etaf-weread-theme)
 (require 'etaf-weread-library)
 
+;; C functions of the window system; a batch or no-X build lacks them, so
+;; the byte compiler needs the declarations and the call sites guard them.
+(declare-function font-info "font.c" (name &optional frame))
+(declare-function font-xlfd-name "font.c" (font &optional fold-wildcards))
+(declare-function font-at "font.c" (position &optional window string))
+(declare-function font-get "font.c" (font key))
+
 (defconst etaf-weread-sections
   '((书架
      (:shelf "全部书架" list)
