@@ -73,8 +73,9 @@ file into chapters and starts reading:
   reader: a `youdao-dictionary` with its API key and secret configured wins,
   and otherwise the macOS system dictionaries answer offline, so a word in an
   English book is one key away;
-- a local book can be bound to its account book (`pi-skill weread bind set
-  <file> <书名>`, or `bind auto --dir ~/ebooks`): the reading head then shows
+- a local book can be bound to its account book (`bind set <file> <书名>`, or
+  `bind auto --dir ~/ebooks`; with Pi, prefix the backend command with
+  `pi-skill weread`): the reading head then shows
   the account progress beside the local one (`36% · 云端 12%`), the local book
   list shows the account progress as the row meter, and the binding pins which
   account book the highlights are matched from;
@@ -207,10 +208,12 @@ outside ETAF.
 
 ## Troubleshooting
 
-- **登录态失效**: the status line shows the skill message; run
-  `pi-skill weread login` and press `g`.
-- **Empty shelf or notebook**: check `pi-skill weread status`; a failing backend
-  reply is reported in the status line, and the reader stays usable.
+- **登录态失效**: the status line shows the backend message; sign in again
+  through the backend (README, "The `weread` backend": `login --from-chrome` or
+  `--cookie`, or `pi-skill weread login` with Pi) and press `g`.
+- **Empty shelf or notebook**: run the backend `status` (same section); a
+  failing backend reply is reported in the status line, and the reader stays
+  usable.
 - **The local index is not written**: Emacs must be built with SQLite support
   (`sqlite-available-p`); otherwise the index section reports the storage
   failure while the online reader keeps working.

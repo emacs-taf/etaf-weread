@@ -59,7 +59,7 @@ tabs:
 | Emacs 29.1 or newer | the ETAF runtime and the built-in SQLite support | `emacs --version` |
 | Node.js 22 or newer | runs the backend client | `node --version` |
 | `etaf`, `etaf-ui`, `etaf-db`, `ebox`, `ecss` | the framework; each root entry must be on `load-path` | every checkout is readable |
-| `weread` backend | shelf, notes, login | `pi-skill weread status`, or its `scripts/weread.mjs` exists |
+| `weread` backend | shelf, notes, login | the checkout's `scripts/weread.mjs` exists (see [The `weread` backend](#2-the-weread-backend)), or `pi-skill weread status` with Pi |
 
 The reader displays what the backend provides: the `weread` skill owns the
 account, the cookie and the highlight index, and the app keeps a local SQLite
@@ -78,18 +78,34 @@ highlight index (no external database is needed).
 
 ### 2. The `weread` backend
 
+The backend is an independent command-line package, published at
+<https://forgejo.vhkd.top/pi-hub/weread>; the declared dependencies travel
+inside the same checkout, so a plain clone runs as-is.  Clone it, check the
+login and sign in once:
+
 ```sh
-pi-skill weread status            # reports a missing login and the next step
-pi-skill weread login             # opens a controlled browser for the QR scan
+git clone https://forgejo.vhkd.top/pi-hub/weread.git ~/src/weread
+SKILL=~/src/weread/skills/weread
+node "$SKILL/scripts/weread.mjs" status                                 # reports a missing login
+node "$SKILL/scripts/weread.mjs" login --from-chrome                    # macOS: reads the Chrome session
+# or paste the two cookie values from a signed-in browser:
+node "$SKILL/scripts/weread.mjs" login --cookie "wr_vid=…; wr_skey=…"
+```
+
+```elisp
+(setq etaf-weread-skill-directory "~/src/weread/skills/weread")
 ```
 
 WeChat Reading only offers QR login, so this step needs the user once.  The
 cookie is stored at `~/.pi/agent/local/skills/weread/auth.json`; later reads go
-straight over HTTP.  When the skill lives elsewhere, point the app at it:
+straight over HTTP.
 
-```elisp
-(setq etaf-weread-skill-directory "/path/to/weread")
-```
+With Pi the same backend installs as a skill package —
+`pi install git:forgejo.vhkd.top/pi-hub/weread@v0.2.1`, then
+`pi-skill weread login` opens the controlled browser for the QR scan.  Writing
+the reading place back to the account (`w`) drives the official web reader
+through the same controlled browser, so that one command needs the complete Pi
+skill setup; everything else works from the cookie alone.
 
 ### 3. The Emacs package
 
@@ -115,10 +131,10 @@ A non-interactive path to a working reader (the QR scan needs the user once):
 
 ```sh
 command -v node || brew install node
-SKILL="${ETAF_WEREAD_SKILL_DIR:-$HOME/.pi/agent/shared/skills/weread}"
+SKILL="${ETAF_WEREAD_SKILL_DIR:-$HOME/src/weread/skills/weread}"
 test -f "$SKILL/scripts/weread.mjs" || {
-  echo "weread backend not found: $SKILL" >&2; exit 1; }
-pi-skill weread status || pi-skill weread login
+  echo "weread backend not found: $SKILL (install it first: see 'The weread backend')" >&2; exit 1; }
+node "$SKILL/scripts/weread.mjs" status || node "$SKILL/scripts/weread.mjs" login --from-chrome
 ```
 
 ```elisp
@@ -128,8 +144,8 @@ pi-skill weread status || pi-skill weread login
 ```
 
 A missing client or an expired cookie leaves the reader mounted with the
-backend error in its message line; run `pi-skill weread login` (or `g`) and
-retry.
+backend error in its message line; sign in again through the backend (see "The
+`weread` backend") and press `g` to retry.
 
 ## Minimal example
 

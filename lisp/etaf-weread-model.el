@@ -1305,7 +1305,7 @@ a sync was requested.  The reply refreshes the published binding."
     (let ((binding (etaf-weread--binding-for app path)))
       (unless (and binding (not (string-empty-p (or (plist-get binding :book-id) ""))))
         (signal 'etaf-weread-error
-                (list (format "《%s》还没绑定微信读书；先跑 pi-skill weread bind set"
+                (list (format "《%s》还没绑定微信读书；先跑后端 bind set（安装方式见 README 的 weread backend 一节）"
                               (or (plist-get local :title) "这本本地书")))))
       (if (not (y-or-n-p (format "把《%s》的本地进度同步到微信读书？"
                                  (or (plist-get local :title) "这本本地书"))))
