@@ -37,8 +37,14 @@ to embed the reader in another layout.
 | `I` | index the notebook's highlights into the local database |
 | `g` | reload the current list, account and statistics |
 | `T` | switch to the next palette (dark, light, sepia) |
-| `C-c h` | key summary in the echo area |
+| `?` or `C-c h` | searchable, read-only keyboard help in the reader |
 | `q` | close the reader |
+
+Help stays in the current buffer without splitting the Emacs window. It lists
+actual effective bindings with short labels, including local keymap overrides.
+Use `/` to search; Escape leaves search editing first, then closes help and
+restores the reader's focus. Clicking the backdrop also closes it. Wide windows
+use two columns; compact windows use one scrolling column.
 
 In the local index section the search field filters the indexed highlights
 instead of the store, and `RET` opens the book of the selected highlight.

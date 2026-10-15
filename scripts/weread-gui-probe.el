@@ -134,12 +134,12 @@ line height the page budget counts, and both binding hints must arrive whole."
                  ;; keeps only the short one.
                  ((eq (plist-get state :pane) 'reader)
                   (if (eq (plist-get state :layout) 'narrow)
-                      (list "j/k 逐行 · SPC 翻页" "c 选章")
-                    (list "j/k 逐行 · SPC 翻页" "<next> 翻章 · v 书单 · c 选章")))
+                      (list "↑/↓ 逐行 · SPC 翻页" "c 选章")
+                    (list "↑/↓ 逐行 · SPC 翻页" "<next> 翻章 · v 书单 · c 选章")))
                  ((eq (plist-get state :layout) 'wide)
                   (list "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"))
                  ((eq (plist-get state :layout) 'narrow) (list "? 帮助"))
-                 (t (list "j/k 选择 · RET 打开 · v 切换面板"))))
+                 (t (list "↑/↓ 选择 · RET 打开 · v 切换面板"))))
          (problems (delq nil
                          (list (unless (and window
                                             (<= (car canvas) (window-pixel-height window)))

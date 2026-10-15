@@ -4,6 +4,10 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- `?` and `C-c h` now open the same searchable, read-only help dialog inside
+  the reader. Effective bindings supply its labels; Escape or an outside
+  click closes it and restores focus without splitting the window.
+
 - Opening the minibuffer (`M-x`, a completion popup or the reader's own
   prompts) no longer shrinks the book list, the reading pane or the pane
   budgets to the lines the prompt borrows. The reader keeps the layout it
@@ -33,7 +37,7 @@ All notable user-visible changes to ETAF Weread.
   whole frame into reading surface, `T` cycles dark/light/sepia, paragraphs are
   indented the way Chinese books print them, and the running head shows how
   far the book is read.
-- Reading keys: `j`/`k`, the arrows and the wheel scroll line by line, `g`/`G`
+- Reading keys: the arrows and the wheel scroll line by line, `g`/`G`
   jump to the start and end of the chapter, `c` picks a chapter from the
   book's own list, and `v` returns to the book list.
 - Reading preferences (palette, column width, one or two columns, font size)

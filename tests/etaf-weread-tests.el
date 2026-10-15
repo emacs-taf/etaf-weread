@@ -668,7 +668,7 @@ columns they are painted in, so no layout cuts the summary off."
             (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
             (with-current-buffer buffer
               (should (string-match-p
-                       (regexp-quote "j/k 选择 · RET 打开 · v 切换面板")
+                       (regexp-quote "↑/↓ 选择 · RET 打开 · v 切换面板")
                        (buffer-substring-no-properties (point-min) (point-max)))))
             ;; A narrow frame: only the short hint fits.
             (setq narrow (split-window (selected-window) 25 'right))
@@ -683,7 +683,7 @@ columns they are painted in, so no layout cuts the summary off."
               (let ((text (buffer-substring-no-properties (point-min) (point-max))))
                 (should (string-match-p (regexp-quote "? 帮助") text))
                 (should-not (string-match-p
-                             (regexp-quote "j/k 选择 · RET 打开 · v 切换面板")
+                             (regexp-quote "↑/↓ 选择 · RET 打开 · v 切换面板")
                              text))))))
       (when (and narrow (window-live-p narrow)
                  (not (eq narrow (selected-window))))
@@ -736,8 +736,8 @@ its pane choice."
 
 (ert-deftest etaf-weread-tests-ret-opens-the-selection ()
   "Pressing RET after moving the selection opens the selected book.
-The renderer only activates a Host under point, and j/k leave point where it
-was, so the reader falls back to the selection the manual promises."
+The renderer only activates a Host under point, and the arrows leave point
+where it was, so the reader falls back to the selection the manual promises."
   (setq etaf-weread-tests--requests nil)
   (let ((etaf-weread-buffer-name " *etaf-weread-tests-ret*")
         (app (etaf-weread-tests--session)))
@@ -1628,6 +1628,61 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
               (should (string-prefix-p "Backend command failed" (cadr crash)))
               (should (equal (plist-get (cddr crash) :hint) "boom")))))
       (delete-directory directory t))))
+
+(ert-deftest etaf-weread-tests-help-stays-in-reader ()
+  "Both help entries show effective keys without leaving or changing the reader."
+  (save-window-excursion
+    (let* ((etaf-weread-buffer-name " *Weread help acceptance*")
+           (model (etaf-weread-tests--session))
+           (buffer (etaf-weread-open model))
+           (runtime (etaf-runtime-for-buffer buffer)))
+      (unwind-protect
+          (with-current-buffer buffer
+            (etaf-focus-next runtime)
+            (let ((focus (etaf-focused-host-ref runtime))
+                  (windows (window-list))
+                  (section (plist-get (etaf-weread-state model) :section)))
+              (dolist (key '("?" "C-c h"))
+                (execute-kbd-macro (kbd key))
+                (let* ((data (etaf-help-data runtime))
+                       (entries (apply #'append
+                                       (mapcar (lambda (group) (plist-get group :entries))
+                                               (plist-get data :groups))))
+                       (export (cl-find "E" entries :test #'equal
+                                        :key (lambda (entry) (plist-get entry :key))))
+                       (up (cl-find "M-v" entries :test #'equal
+                                    :key (lambda (entry) (plist-get entry :key))))
+                       (same-runtime (eq runtime (etaf-runtime-for-buffer buffer))))
+                  (should same-runtime)
+                  (should (eq (window-buffer) buffer))
+                  (should (equal windows (window-list)))
+                  (should (equal (plist-get data :title) "微信读书"))
+                  (should (equal (plist-get export :label) "导出笔记"))
+                  (should (equal (plist-get up :label) "阅读上一页"))
+                  (should (plist-get data :notes)))
+                (execute-kbd-macro (kbd "/"))
+                (execute-kbd-macro "?")
+                (let ((editing (etaf-text-input-active-p runtime)))
+                  (should editing))
+                (execute-kbd-macro (kbd "<escape>"))
+                (let ((editing (etaf-text-input-active-p runtime)))
+                  (should-not editing))
+                (should (string-match-p "快捷键 · 只读"
+                                        (buffer-substring-no-properties (point-min) (point-max))))
+                (execute-kbd-macro (kbd "<escape>"))
+                (let ((restored (equal focus (etaf-focused-host-ref runtime)))
+                      (after (plist-get (etaf-weread-state model) :section)))
+                  (should restored)
+                  (should (equal section after)))))
+            (execute-kbd-macro (kbd "?"))
+            (let* ((map (get-text-property (point-min) 'keymap))
+                   (command (lookup-key map [mouse-1]))
+                   (last-input-event (list 'mouse-1 (list (selected-window) 1 '(0 . 0) 0))))
+              (call-interactively command))
+            (let ((closed (etaf-help-close runtime)))
+              (should-not closed)))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer (etaf-weread-close)))))))
 
 (provide 'etaf-weread-tests)
 ;;; etaf-weread-tests.el ends here

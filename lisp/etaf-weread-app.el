@@ -39,61 +39,66 @@
 (defvar-local etaf-weread--model nil
   "Reader model shown by the current buffer's runtime.")
 
+(defconst etaf-weread--bindings
+  '(("C-n" etaf-weread--next-item "下一项／向下阅读")
+    ("C-p" etaf-weread--previous-item "上一项／向上阅读")
+    ("<wheel-up>" etaf-weread--wheel-up "向上滚动")
+    ("<wheel-down>" etaf-weread--wheel-down "向下滚动")
+    ("<home>" etaf-weread--first-item "列表／章节开头")
+    ("<end>" etaf-weread--last-item "列表／章节末尾")
+    ("<next>" etaf-weread--next-page "列表下一页／下一章")
+    ("<prior>" etaf-weread--previous-page "列表上一页／上一章")
+    ("RET" etaf-weread--activate "打开书籍／激活控件")
+    ("C-v" etaf-weread--scroll-pane-down "阅读下一页")
+    ("M-v" etaf-weread--scroll-pane-up "阅读上一页")
+    ("SPC" etaf-weread--scroll-pane-down "阅读下一页")
+    ("S-SPC" etaf-weread--scroll-pane-up "阅读上一页")
+    ("v" etaf-weread--toggle-pane "切换阅读面板")
+    ("b" etaf-weread--bookmark "切换当前位置书签")
+    ("w" etaf-weread--sync-progress "同步阅读进度")
+    ("B" etaf-weread--bookmarks "选择书签")
+    ("%" etaf-weread--jump-percent "跳转阅读进度")
+    ("m" etaf-weread--toggle-spread "切换阅读栏数")
+    ("c" etaf-weread--choose-chapter "选择章节")
+    ("f" etaf-weread--zen "切换专注阅读")
+    ("F" etaf-weread--cycle-font "切换阅读字号")
+    ("a" etaf-weread--auto-scroll "切换自动滚动")
+    ("y" etaf-weread--lookup "查词")
+    ("N" etaf-weread--next-note "下一条微信笔记")
+    ("M" etaf-weread--choose-note "选择微信笔记")
+    ("[" etaf-weread--reading-narrower "收窄阅读栏")
+    ("]" etaf-weread--reading-wider "加宽阅读栏")
+    ("d" etaf-weread--detail-pane "书籍详情")
+    ("P" etaf-weread--notes-pane "书籍划线")
+    ("o" etaf-weread--open-book "在浏览器阅读")
+    ("E" etaf-weread--export-notes "导出笔记")
+    ("s" etaf-weread--shelf "全部书架")
+    ("n" etaf-weread--notebook "笔记本")
+    ("i" etaf-weread--index-section "本地笔记检索")
+    ("L" etaf-weread--local-books "本地书籍")
+    ("I" etaf-weread--build-index "建立本地笔记索引")
+    ("t" etaf-weread--stats "阅读统计")
+    ("/" etaf-weread--search "搜索书籍／当前内容")
+    ("S" etaf-weread--search "搜索书籍／当前内容")
+    ("1" etaf-weread--shelf "全部书架")
+    ("2" etaf-weread--reading "在读书籍")
+    ("3" etaf-weread--finished "已读书籍")
+    ("4" etaf-weread--notebook "笔记本")
+    ("5" etaf-weread--search "搜索书籍／当前内容")
+    ("6" etaf-weread--stats "阅读统计")
+    ("7" etaf-weread--index-section "本地笔记检索")
+    ("g" etaf-weread--refresh "刷新／返回章首")
+    ("G" etaf-weread--last-item "列表／章节末尾")
+    ("T" etaf-weread--cycle-theme "切换深浅／纸色主题")
+    ("C-c h" etaf-help "查看快捷键")
+    ("q" etaf-weread-close "关闭阅读器"))
+  "Native reader bindings and their short help labels.")
+
 (defvar etaf-weread-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-n") #'etaf-weread--next-item)
-    (define-key map (kbd "C-p") #'etaf-weread--previous-item)
-    ;; The event position chooses between the book list and the side pane.
-    (define-key map (kbd "<wheel-up>") #'etaf-weread--wheel-up)
-    (define-key map (kbd "<wheel-down>") #'etaf-weread--wheel-down)
-    (define-key map (kbd "<home>") #'etaf-weread--first-item)
-    (define-key map (kbd "<end>") #'etaf-weread--last-item)
-    (define-key map (kbd "<next>") #'etaf-weread--next-page)
-    (define-key map (kbd "<prior>") #'etaf-weread--previous-page)
-    (define-key map (kbd "RET") #'etaf-weread--activate)
-    (define-key map (kbd "C-v") #'etaf-weread--scroll-pane-down)
-    (define-key map (kbd "M-v") #'etaf-weread--scroll-pane-up)
-    (define-key map (kbd "SPC") #'etaf-weread--scroll-pane-down)
-    (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
-    (define-key map (kbd "v") #'etaf-weread--toggle-pane)
-    (define-key map (kbd "b") #'etaf-weread--bookmark)
-    (define-key map (kbd "w") #'etaf-weread--sync-progress)
-    (define-key map (kbd "B") #'etaf-weread--bookmarks)
-    (define-key map (kbd "%") #'etaf-weread--jump-percent)
-    (define-key map (kbd "m") #'etaf-weread--toggle-spread)
-    (define-key map (kbd "c") #'etaf-weread--choose-chapter)
-    (define-key map (kbd "f") #'etaf-weread--zen)
-    (define-key map (kbd "F") #'etaf-weread--cycle-font)
-    (define-key map (kbd "a") #'etaf-weread--auto-scroll)
-    (define-key map (kbd "y") #'etaf-weread--lookup)
-    (define-key map (kbd "N") #'etaf-weread--next-note)
-    (define-key map (kbd "M") #'etaf-weread--choose-note)
-    (define-key map (kbd "[") #'etaf-weread--reading-narrower)
-    (define-key map (kbd "]") #'etaf-weread--reading-wider)
-    (define-key map (kbd "d") #'etaf-weread--detail-pane)
-    (define-key map (kbd "P") #'etaf-weread--notes-pane)
-    (define-key map (kbd "o") #'etaf-weread--open-book)
-    (define-key map (kbd "E") #'etaf-weread--export-notes)
-    (define-key map (kbd "s") #'etaf-weread--shelf)
-    (define-key map (kbd "n") #'etaf-weread--notebook)
-    (define-key map (kbd "i") #'etaf-weread--index-section)
-    (define-key map (kbd "L") #'etaf-weread--local-books)
-    (define-key map (kbd "I") #'etaf-weread--build-index)
-    (define-key map (kbd "t") #'etaf-weread--stats)
-    (define-key map (kbd "/") #'etaf-weread--search)
-    (define-key map (kbd "S") #'etaf-weread--search)
-    (define-key map (kbd "1") #'etaf-weread--shelf)
-    (define-key map (kbd "2") #'etaf-weread--reading)
-    (define-key map (kbd "3") #'etaf-weread--finished)
-    (define-key map (kbd "4") #'etaf-weread--notebook)
-    (define-key map (kbd "5") #'etaf-weread--search)
-    (define-key map (kbd "6") #'etaf-weread--stats)
-    (define-key map (kbd "7") #'etaf-weread--index-section)
-    (define-key map (kbd "g") #'etaf-weread--refresh)
-    (define-key map (kbd "G") #'etaf-weread--last-item)
-    (define-key map (kbd "T") #'etaf-weread--cycle-theme)
-    (define-key map (kbd "C-c h") #'etaf-weread--help)
-    (define-key map (kbd "q") #'etaf-weread-close)
+    (dolist (binding etaf-weread--bindings)
+      (define-key map (kbd (car binding))
+                  (list 'menu-item (nth 2 binding) (nth 1 binding))))
     map)
   "Keymap of the buffer opened by `etaf-weread-open'.
 It keeps Ebox's TAB focus cycling and RET activation, and replaces the
@@ -113,27 +118,14 @@ selection the reader promises instead of a row under a revealed point."
 (defvar etaf-weread--command-maps
   (list (cons 'etaf-weread--model
               (let ((map (make-sparse-keymap)))
-                (define-key map [wheel-up] #'etaf-weread--wheel-up)
-                (define-key map [wheel-down] #'etaf-weread--wheel-down)
-                ;; These four are scroll or window keys in the renderer's own
-                ;; minor-mode map, which wins over a major-mode map.  The reader
-                ;; replaces them, so it owns them here where it can win; the
-                ;; mode map keeps the documented bindings for a buffer that was
-                ;; never opened.
-                (define-key map (kbd "n") #'etaf-weread--notebook)
-                (define-key map (kbd "q") #'etaf-weread-close)
-                (define-key map (kbd "<next>") #'etaf-weread--next-page)
-                (define-key map (kbd "<prior>") #'etaf-weread--previous-page)
-                ;; The renderer binds these to its own canvas scroll, which a
-                ;; reader that owns its canvas never uses.
-                (define-key map (kbd "C-v") #'etaf-weread--scroll-pane-down)
-                (define-key map (kbd "M-v") #'etaf-weread--scroll-pane-up)
-                (define-key map (kbd "SPC") #'etaf-weread--scroll-pane-down)
-                (define-key map (kbd "S-SPC") #'etaf-weread--scroll-pane-up)
-                ;; RET stays the renderer's activation for a focused control and
-                ;; falls back to the selection, so `j/k RET' opens the book the
-                ;; manual documents.
-                (define-key map (kbd "RET") #'etaf-weread--activate)
+                ;; Raise only reader-owned keys above renderer minor modes,
+                ;; keeping their labels from the same binding declaration.
+                (dolist (binding etaf-weread--bindings)
+                  (when (member (car binding)
+                                '("<wheel-up>" "<wheel-down>" "n" "q"
+                                  "<next>" "<prior>" "C-v" "M-v" "SPC" "S-SPC" "RET"))
+                    (define-key map (kbd (car binding))
+                                (list 'menu-item (nth 2 binding) (nth 1 binding)))))
                 map)))
   "Reader bindings that must beat the renderer's own minor-mode map.
 `emulation-mode-map-alists' entries take precedence over every minor mode, so
@@ -308,7 +300,8 @@ COLUMNS describes the event window; LAYOUT and PANE describe the reader."
 (defun etaf-weread--activate ()
   "Open the Host at point, or the selected book's detail or highlights.
 A click or TAB leaves its Host under point and the renderer activates it;
-moving the selection with j/k leaves point where it was, and the reader then
+moving the selection with the arrows leaves point where it was, and the
+reader then
 opens the book the selection points at."
   (interactive)
   (condition-case nil
@@ -666,18 +659,6 @@ of cells keeps a sub-cell remainder at its right or bottom edge.  Remapping the
 default face shows the reader background there instead of the frame's."
   (face-remap-set-base 'default (list :background (etaf-weread-color :bg))))
 
-(defun etaf-weread--help ()
-  "Show the reader's key bindings."
-  (interactive)
-  (message
-   (concat "j/k 或滚轮选择 · 单击选中 · 双击/RET 打开 · v 详情/笔记 · o 浏览器阅读"
-           " · E 导出笔记 · C-v/M-v 或 SPC 滚动目录/划下面板 · s 书架"
-           " · 1/2/3 全部/在读/读完 · n 笔记本"
-           " · i 笔记检索 · I 建立本地索引 · t 统计 · l 本地书 · / 搜索 · g 刷新"
-           " · 读本地书：j/k 逐行 · SPC 翻页 · g/G 章首尾 · c 选章 · m 单双栏 · f 全屏"
-           " · a 自动滚动 · y 查词 · N 下一条微信笔记 · M 笔记列表 · F 字号"
-           " · w 同步进度到微信读书 · [ ] 留白 · T 深/浅/纸色 · q 关闭")))
-
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points
 ;;; ---------------------------------------------------------------------------
@@ -720,7 +701,10 @@ the session's timers and pending backend requests."
          (etaf-weread--dispose session)))))
   :view
   (flex :flex-direction 'column :width '(vw 100) :height '(vh 100)
-        :ref 'weread-root
+        :ref 'weread-root :aria-label "微信读书"
+        :help '("书架与笔记来自微信读书账号；本地笔记索引支持离线检索。"
+                "本地书籍可绑定账号书籍以匹配划线；同步进度需要后端及浏览器登录。"
+                "搜索随当前内容切换：书城、笔记索引或已打开的本地书籍。")
         ;; One clear line above the chrome keeps the header off the window
         ;; edge; the layout chrome counts this line.
         :padding-top '(lh 1)
@@ -848,8 +832,8 @@ the session's timers and pending backend requests."
      :if (not (etaf-weread--read session :zen))
      :hint (if (eq (etaf-weread--effective-pane session) 'reader)
                (if (eq (etaf-weread--read session :layout) 'narrow)
-                   "j/k 逐行 · SPC 翻页 · c 选章 · a 自动 · y 查词"
-                 "j/k 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · a 自动 · y 查词 · F 字号 · [ ] 留白 · T 主题")
+                   "↑/↓ 逐行 · SPC 翻页 · c 选章 · a 自动 · y 查词"
+                 "↑/↓ 逐行 · SPC 翻页 · <next> 翻章 · v 书单 · c 选章 · m 单双栏 · f 全屏 · a 自动 · y 查词 · F 字号 · [ ] 留白 · T 主题")
              etaf-weread--footer-hint)
      :account (etaf-weread--read session :account)
      :summary (etaf-weread--read session :summary)

@@ -348,7 +348,7 @@ the full binding summary cannot share a phone-like line with the switch."
          :overflow 'hidden
       (text (expr (if (eq layout 'narrow)
                        "? 帮助"
-                     "j/k 选择 · RET 打开 · v 切换面板"))))))
+                     "↑/↓ 选择 · RET 打开 · v 切换面板"))))))
 
 (defun etaf-weread--reader-column-slices (lines rows spread)
   "Return LINES divided into SPREAD columns of ROWS lines each.

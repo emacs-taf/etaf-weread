@@ -12,6 +12,11 @@
   "support": [],
   "cases": [
     {
+      "name": "etaf-weread-tests-help-stays-in-reader",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Both help entries show effective labelled keys in the reader, preserve business state and restore focus after layered Escape or backdrop dismissal."
+    },
+    {
       "name": "etaf-weread-tests-new-session-is-headless",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "A session built without a buffer starts on the shelf, shows the detail pane and sends no request."
@@ -124,7 +129,7 @@
     {
       "name": "etaf-weread-tests-ret-opens-the-selection",
       "file": "tests/etaf-weread-tests.el",
-      "purpose": "RET activates a Host under point and otherwise opens the selected book, so selecting with j/k and pressing RET follows the documented contract."
+      "purpose": "RET activates a Host under point and otherwise opens the selected book, so selecting with the arrows and pressing RET follows the documented contract."
     },
     {
       "name": "etaf-weread-tests-library-lists-and-parses-local-books",
