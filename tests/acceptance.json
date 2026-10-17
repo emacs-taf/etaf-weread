@@ -74,7 +74,7 @@
     {
       "name": "etaf-weread-tests-export-notes-sends-the-export-request",
       "file": "tests/etaf-weread-tests.el",
-      "purpose": "Exporting the selected book sends the skill export and reports the backend conclusion."
+      "purpose": "Exporting the selected book sends the export request and reports the backend conclusion."
     },
     {
       "name": "etaf-weread-tests-index-stores-and-searches-highlights",
@@ -99,7 +99,7 @@
     {
       "name": "etaf-weread-tests-missing-backend-script-is-reported",
       "file": "tests/etaf-weread-tests.el",
-      "purpose": "A client whose skill script is missing reports the failure instead of signaling."
+      "purpose": "A client whose backend script is missing reports the failure instead of signaling."
     },
     {
       "name": "etaf-weread-tests-theme-tokens-cover-both-palettes",
@@ -222,14 +222,14 @@
       "purpose": "Opening the reader replaces the selected window instead of splitting the frame into a second pane."
     },
     {
-      "name": "etaf-weread-tests-default-client-runs-the-skill-script",
+      "name": "etaf-weread-tests-default-client-runs-the-backend-script",
       "file": "tests/etaf-weread-tests.el",
-      "purpose": "The default client runs the skill script with the documented arguments for a shelf filter and for an export with its directory."
+      "purpose": "The default client runs the backend script with the documented arguments for a shelf filter and for an export with its directory."
     },
     {
-      "name": "etaf-weread-tests-skill-refusal-reports-its-own-message",
+      "name": "etaf-weread-tests-backend-refusal-reports-its-own-message",
       "file": "tests/etaf-weread-tests.el",
-      "purpose": "A refused skill command surfaces the backend's own JSON message, code and hint even though the exit event can arrive before the output; a crash without JSON keeps the exit status."
+      "purpose": "A refused backend command surfaces its own JSON message, code and hint even though the exit event can arrive before the output; a crash without JSON keeps the exit status."
     },
     {
       "name": "etaf-weread-tests-local-binding-shows-account-progress",

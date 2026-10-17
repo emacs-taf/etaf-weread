@@ -80,14 +80,16 @@ file into chapters and starts reading:
   and otherwise the macOS system dictionaries answer offline, so a word in an
   English book is one key away;
 - a local book can be bound to its account book (`bind set <file> <书名>`, or
-  `bind auto --dir ~/ebooks`; with Pi, prefix the backend command with
-  `pi-skill weread`): the reading head then shows
+  `bind auto --dir ~/ebooks`; run these through the bundled backend, see
+  README, "The bundled backend and its one-time login"): the reading head then shows
   the account progress beside the local one (`36% · 云端 12%`), the local book
   list shows the account progress as the row meter, and the binding pins which
   account book the highlights are matched from;
 - `w` writes the reading place of the open local book back to the account.  The
-  account endpoint needs the reader's own signature, so the `weread` skill
-  drives the official web reader in the controlled browser; the action asks for
+  account endpoint needs the reader's own signature, so the backend drives the
+  official web reader in a controlled browser (set `WEREAD_CDP_CHANNEL` to a
+  `cdp-channel.mjs`; without one, the action reports that the capability is
+  missing and everything else keeps working).  The action asks for
   confirmation first, reports the account reply in the status line, and the
   head updates to the number the account reported.  A local file without a
   binding tells you the `bind set` command instead of guessing;
@@ -178,7 +180,7 @@ through ETAF DB:
   refresh an index that was built from older data.
 
 The index is a local copy, not the source of truth: the server still owns the
-account and the skill owns the login.
+account and the bundled backend owns the login.
 
 ## Theming
 
@@ -214,9 +216,10 @@ outside ETAF.
 
 ## Troubleshooting
 
-- **登录态失效**: the status line shows the backend message; sign in again
-  through the backend (README, "The `weread` backend": `login --from-chrome` or
-  `--cookie`, or `pi-skill weread login` with Pi) and press `g`.
+- **登录态失效**: the status line shows the backend message and its command;
+  sign in again through the bundled backend (`login --from-chrome`, `--cookie`
+  or the controlled browser; see README, "The bundled backend and its one-time
+  login") and press `g`.
 - **Empty shelf or notebook**: run the backend `status` (same section); a
   failing backend reply is reported in the status line, and the reader stays
   usable.

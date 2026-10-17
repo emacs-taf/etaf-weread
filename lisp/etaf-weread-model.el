@@ -526,7 +526,7 @@ repaint the whole view for nothing."
 (cl-defun etaf-weread--call (app request &key on-ok on-error)
   "Send REQUEST for APP, routing a failure into the visible status line.
 ON-OK receives the reply data; ON-ERROR the failure message, its hint and the
-skill's error code.  A client that
+backend's error code.  A client that
 signals while turning the request into a command is reported like any other
 backend failure, so nothing reaches the caller of a reader action."
   (let ((delivered nil)
@@ -563,9 +563,9 @@ backend failure, so nothing reaches the caller of a reader action."
 
 (defun etaf-weread--payload (data)
   "Return the business payload of backend reply DATA.
-A skill reply wraps its fields in a `data' object beside `ok', `conclusion' and
-`as_of'; a scripted client may pass the fields directly, which this helper
-accepts as well."
+A backend reply wraps its fields in a `data' object beside `ok',
+`conclusion' and `as_of'; a scripted client may pass the fields directly, which
+this helper accepts as well."
   (or (plist-get data :data) data))
 
 (defun etaf-weread-format-duration (seconds)
@@ -618,7 +618,7 @@ the bar reads as one glyph string in any monospace font."
 
 (defun etaf-weread--truthy-p (value)
   "Return non-nil when VALUE means true in a backend reply.
-The skill writes booleans as JSON true/false, but some legacy fields are 1/0
+The backend writes booleans as JSON true/false, but some legacy fields are 1/0
 numbers or \"true\" strings."
   (cond ((eq value t) t)
         ((numberp value) (/= value 0))
@@ -1295,7 +1295,7 @@ once.  A session without an open local book signals `etaf-weread-error'."
 (defun etaf-weread-sync-progress (app)
   "Write APP's reading place of the open local book back to WeChat Reading.
 The account's copy is updated by the official web reader, which the weread
-skill drives in the controlled browser; this asks for confirmation first.  A
+backend drives in the controlled browser; this asks for confirmation first.  A
 local book without a binding signals `etaf-weread-error'.  Return non-nil when
 a sync was requested.  The reply refreshes the published binding."
   (let* ((local (etaf-weread--read app :local))
@@ -2353,7 +2353,7 @@ the account reads.  A book without a URL signals `etaf-weread-error'."
 
 (defun etaf-weread-export-notes (app &optional item)
   "Export the highlights and thoughts of ITEM, or the selected book, as Markdown.
-The skill writes the file under its configured export directory and the reply
+The backend writes the file under its configured export directory and the reply
 is reported in the status line.  A book without an id signals
 `etaf-weread-error'."
   (let* ((item (or item (etaf-weread--selected-row app)))
@@ -2511,7 +2511,7 @@ dropped.  Return the generation of this run."
   "Fetch the next pending notebook book and store its highlights.
 Every reply checks the run generation, so a disposed session or a newer index
 run never continues an older walk.  One book is in flight at a time, which
-keeps the skill's rate limit and the progress line honest."
+keeps the backend's rate limit and the progress line honest."
   (let* ((pending (plist-get app :index-pending))
          (generation (and pending (plist-get pending :generation))))
     (when (and pending (= generation (plist-get app :index-generation)))

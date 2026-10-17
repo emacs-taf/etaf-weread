@@ -8,7 +8,7 @@
 ;; Two entry points for trying the reader without wiring anything:
 ;;
 ;;   M-x etaf-weread-demo-open   a scripted account (no network, no login)
-;;   M-x etaf-weread-demo-live   the installed weread skill and stored login
+;;   M-x etaf-weread-demo-live   the bundled backend and the stored login
 ;;
 ;; The scripted account carries a small shelf, one book with chapters and
 ;; highlights, a notebook entry and reading statistics, so every screen of the
@@ -64,7 +64,7 @@
   "Highlights and attached thoughts the scripted demo account reports.")
 
 (defun etaf-weread-demo--client (request callback)
-  "Answer the scripted demo account the way the skill would answer REQUEST.
+  "Answer the scripted demo account the way the backend would answer REQUEST.
 This function is a valid `etaf-weread-client-call' client, which is what makes
 it useful as a reference: it is the whole backend in one place."
   (let ((book (lambda (item)
@@ -138,12 +138,12 @@ it useful as a reference: it is the whole backend in one place."
 
 (defun etaf-weread-demo-open ()
   "Open the reader on the scripted demo account.
-No network, login or skill installation is needed."
+No network, login or external backend is needed."
   (interactive)
   (etaf-weread-open (etaf-weread-create :client #'etaf-weread-demo--client)))
 
 (defun etaf-weread-demo-live ()
-  "Open the reader against the installed weread skill and stored login."
+  "Open the reader against the bundled backend and the stored login."
   (interactive)
   (etaf-weread-open))
 

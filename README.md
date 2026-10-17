@@ -43,7 +43,7 @@ tabs:
   and page scrolling, chapter jumps (`<next>` / `c`), a running head with the
   reading progress and an indent-aware Chinese layout.
 - Export: the selected book's highlights and thoughts are written as Markdown
-  by the `weread` skill.
+  by the bundled `weread` backend.
 - Open in the browser: the selected book opens in the WeChat Reading web reader.
 - Three palettes (dark, light and sepia) with one key, published as `:ui-*`
   theme tokens so shared ETAF UI controls follow the same colours.
@@ -59,10 +59,10 @@ tabs:
 | Emacs 29.1 or newer | the ETAF runtime and the built-in SQLite support | `emacs --version` |
 | Node.js 22 or newer | runs the backend client | `node --version` |
 | `etaf`, `etaf-ui`, `etaf-db`, `ebox`, `ecss` | the framework; each root entry must be on `load-path` | every checkout is readable |
-| `weread` backend | shelf, notes, login | the checkout's `scripts/weread.mjs` exists (see [The `weread` backend](#2-the-weread-backend)), or `pi-skill weread status` with Pi |
+| Bundled `weread` backend | shelf, notes, login | ships inside the package; only Node.js is required |
 
-The reader displays what the backend provides: the `weread` skill owns the
-account, the cookie and the highlight index, and the app keeps a local SQLite
+The reader displays what the backend provides: the bundled `weread` backend owns
+the account, the cookie and the highlight index, and the app keeps a local SQLite
 mirror of every highlight it reads.
 
 ## Installation
@@ -76,36 +76,30 @@ brew install node                 # Node.js 22 or newer
 Emacs 29.1 or newer is required; its built-in SQLite support stores the local
 highlight index (no external database is needed).
 
-### 2. The `weread` backend
+### 2. The bundled backend and its one-time login
 
-The backend is an independent command-line package, published at
-<https://forgejo.vhkd.top/pi-hub/weread>; the declared dependencies travel
-inside the same checkout, so a plain clone runs as-is.  Clone it, check the
+The account, cookie and highlight backend ships inside this package under
+`backends/weread/`; nothing else has to be installed or cloned.  Check the
 login and sign in once:
 
 ```sh
-git clone https://forgejo.vhkd.top/pi-hub/weread.git ~/src/weread
-SKILL=~/src/weread/skills/weread
-node "$SKILL/scripts/weread.mjs" status                                 # reports a missing login
-node "$SKILL/scripts/weread.mjs" login --from-chrome                    # macOS: reads the Chrome session
+BACKEND="$(dirname "$(locate-library etaf-weread)")/backends/weread"
+node "$BACKEND/weread.mjs" status                                 # reports a missing login
+node "$BACKEND/weread.mjs" login --from-chrome                    # macOS: reads the Chrome session
 # or paste the two cookie values from a signed-in browser:
-node "$SKILL/scripts/weread.mjs" login --cookie "wr_vid=…; wr_skey=…"
+node "$BACKEND/weread.mjs" login --cookie "wr_vid=…; wr_skey=…"
 ```
 
 ```elisp
-(setq etaf-weread-skill-directory "~/src/weread/skills/weread")
 ```
 
 WeChat Reading only offers QR login, so this step needs the user once.  The
-cookie is stored at `~/.pi/agent/local/skills/weread/auth.json`; later reads go
-straight over HTTP.
-
-With Pi the same backend installs as a skill package —
-`pi install git:forgejo.vhkd.top/pi-hub/weread@v0.2.1`, then
-`pi-skill weread login` opens the controlled browser for the QR scan.  Writing
-the reading place back to the account (`w`) drives the official web reader
-through the same controlled browser, so that one command needs the complete Pi
-skill setup; everything else works from the cookie alone.
+cookie is stored in the backend's own data directory; later reads go straight
+over HTTP.  `M-x etaf-weread-open` reports a missing or expired login in its
+status line with the command to rerun, and `g` retries once you have signed in.
+Writing the reading place back to the account (`w`) drives the official web
+reader through a controlled browser, so that one action needs a browser session;
+everything else works from the cookie alone.
 
 ### 3. The Emacs package
 
@@ -131,10 +125,10 @@ A non-interactive path to a working reader (the QR scan needs the user once):
 
 ```sh
 command -v node || brew install node
-SKILL="${ETAF_WEREAD_SKILL_DIR:-$HOME/src/weread/skills/weread}"
-test -f "$SKILL/scripts/weread.mjs" || {
-  echo "weread backend not found: $SKILL (install it first: see 'The weread backend')" >&2; exit 1; }
-node "$SKILL/scripts/weread.mjs" status || node "$SKILL/scripts/weread.mjs" login --from-chrome
+BACKEND="$(dirname "$(locate-library etaf-weread)")/backends/weread"
+test -f "$BACKEND/weread.mjs" || {
+  echo "weread backend not found: reinstall etaf-weread" >&2; exit 1; }
+node "$BACKEND/weread.mjs" status || node "$BACKEND/weread.mjs" login --from-chrome
 ```
 
 ```elisp
@@ -144,8 +138,8 @@ node "$SKILL/scripts/weread.mjs" status || node "$SKILL/scripts/weread.mjs" logi
 ```
 
 A missing client or an expired cookie leaves the reader mounted with the
-backend error in its message line; sign in again through the backend (see "The
-`weread` backend") and press `g` to retry.
+backend error in its message line; sign in again through the bundled backend
+(see "The bundled backend and its one-time login") and press `g` to retry.
 
 ## Minimal example
 
@@ -166,7 +160,7 @@ backend error in its message line; sign in again through the backend (see "The
 ## Runnable demo
 
 `M-x etaf-weread-demo-open` mounts the complete reader on a scripted account,
-so it needs no network, login or skill installation.
+so it needs no network, login or external backend.
 `M-x etaf-weread-demo-live` opens the same reader against the installed
 backend. From a checkout with sibling providers:
 

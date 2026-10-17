@@ -6,9 +6,9 @@
 ;;; Commentary:
 ;;
 ;; The reader does not re-implement the WeChat Reading protocol.  It drives the
-;; `weread' Pi skill through its documented command line:
+;; backend bundled under the package's `backends/' through its command line:
 ;;
-;;   node <skill>/scripts/weread.mjs COMMAND ... --json --quiet
+;;   node <backend>/weread.mjs COMMAND ... --json --quiet
 ;;
 ;; Every command prints JSON.  Requests are plists such as
 ;; (:op :shelf :filter reading :limit 200) and every call is asynchronous:
@@ -28,15 +28,19 @@
 (require 'subr-x)
 (require 'etaf-weread-theme)
 
-(defcustom etaf-weread-skill-directory
-  (expand-file-name "~/.pi/agent/shared/skills/weread")
-  "Directory holding the weread skill scripts.
-`etaf-weread-make-client' uses it to locate `scripts/weread.mjs'."
+(defcustom etaf-weread-backend-directory
+  (expand-file-name "backends/weread"
+                    (file-name-directory (or (locate-library "etaf-weread")
+                                             load-file-name
+                                             buffer-file-name)))
+  "Directory holding this package's WeChat Reading backend.
+The backend ships with the package and is installed from the same archive, so it
+needs no separate download or environment setup."
   :type 'directory
   :group 'etaf-weread)
 
 (defcustom etaf-weread-node-program "node"
-  "Node executable used to run the skill's API client."
+  "Node executable used to run the bundled backend."
   :type 'string
   :group 'etaf-weread)
 
@@ -48,10 +52,10 @@ callback forever.  Callers see (:error MESSAGE)."
   :group 'etaf-weread)
 
 (defcustom etaf-weread-export-directory nil
-  "Directory the skill writes exported Markdown into, or nil for its default.
-When non-nil it is passed to the skill as `--out', which wins over the skill's
-own configuration."
-  :type '(choice (const :tag "Skill default" nil) directory)
+  "Directory the backend writes exported Markdown into, or nil for its default.
+When non-nil it is passed to the backend as `--out', which wins over the
+backend's own configuration."
+  :type '(choice (const :tag "Backend default" nil) directory)
   :group 'etaf-weread)
 
 (defvar etaf-weread-client-factory nil
@@ -62,20 +66,20 @@ It is called with no arguments and must return a client built by
 client; tests bind this to a fake client.")
 
 (cl-defstruct (etaf-weread--client (:constructor etaf-weread--client-create))
-  "Backend client that runs the weread skill as child processes."
-  skill-directory node-program timeout (pending nil))
+  "Backend client that runs the bundled backend as child processes."
+  backend-directory node-program timeout (pending nil))
 
 (cl-defstruct (etaf-weread--pending (:constructor etaf-weread--pending-create))
   "One in-flight backend request."
   process timer cancelled stdout stderr)
 
-(cl-defun etaf-weread-make-client (&key skill-directory node-program timeout)
-  "Create a client that runs the weread skill as child processes.
-SKILL-DIRECTORY, NODE-PROGRAM and TIMEOUT default to
-`etaf-weread-skill-directory', `etaf-weread-node-program' and
+(cl-defun etaf-weread-make-client (&key backend-directory node-program timeout)
+  "Create a client that runs the bundled backend as child processes.
+BACKEND-DIRECTORY, NODE-PROGRAM and TIMEOUT default to
+`etaf-weread-backend-directory', `etaf-weread-node-program' and
 `etaf-weread-request-timeout'."
   (etaf-weread--client-create
-   :skill-directory (or skill-directory etaf-weread-skill-directory)
+   :backend-directory (or backend-directory etaf-weread-backend-directory)
    :node-program (or node-program etaf-weread-node-program)
    :timeout (or timeout etaf-weread-request-timeout)))
 
@@ -130,7 +134,7 @@ requests, or 0 when CLIENT is not a subprocess client."
     count))
 
 (defun etaf-weread--client-request (client request callback)
-  "Run REQUEST through the skill process of CLIENT, then call CALLBACK."
+  "Run REQUEST through the backend process of CLIENT, then call CALLBACK."
   (let ((command (condition-case error
                      (etaf-weread--client-command client request)
                    (error (funcall callback
@@ -144,12 +148,12 @@ requests, or 0 when CLIENT is not a subprocess client."
   "Return the command line for REQUEST as (PROGRAM . ARGUMENTS).
 The result is ready for `make-process': its first element is the program and
 the rest are the arguments.  Signal `etaf-weread-error' for an unknown request."
-  (let* ((skill (etaf-weread--client-skill-directory client))
-         (script (expand-file-name "scripts/weread.mjs" skill))
+  (let* ((backend (etaf-weread--client-backend-directory client))
+         (script (expand-file-name "weread.mjs" backend))
          (node (etaf-weread--client-node-program client)))
     (unless (file-readable-p script)
       (signal 'etaf-weread-error
-              (list (format "weread skill script is missing: %s" script))))
+              (list (format "weread backend script is missing: %s" script))))
     (unless (executable-find node)
       (signal 'etaf-weread-error (list (format "Executable is missing: %s" node))))
     (cons node
@@ -159,8 +163,8 @@ the rest are the arguments.  Signal `etaf-weread-error' for an unknown request."
                   (etaf-weread--export-arguments request)))))
 
 (defun etaf-weread--command-arguments (request)
-  "Return the skill command arguments for REQUEST.
-Only `:export' writes, and it always overrides the skill's preview default
+  "Return the backend command arguments for REQUEST.
+Only `:export' writes, and it always overrides the backend's preview default
 with `--yes' because the reader asks before calling this function."
   (let ((op (plist-get request :op))
         (id (plist-get request :id))
@@ -301,7 +305,7 @@ The callback is skipped when the request was cancelled."
 
 (defun etaf-weread--failure (data errors)
   "Return an (:error ...) result built from backend DATA and ERRORS.
-The skill's `message' is the human sentence; `error' is its stable code and is
+The backend's `message' is the human sentence; `error' is its stable code and is
 kept beside the message so callers can throttle a failed refresh."
   (let ((message (or (plist-get data :message)
                      (plist-get data :error)

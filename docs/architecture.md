@@ -6,7 +6,7 @@
 | --- | --- |
 | `etaf-weread.el` | Package entry: the public API inventory and the feature closure. |
 | `lisp/etaf-weread-theme.el` | Palettes, `etaf-weread-color` and the ETAF UI theme tokens. |
-| `lisp/etaf-weread-service.el` | Backend client: turns requests into `weread` skill command lines and decodes JSON replies. |
+| `lisp/etaf-weread-service.el` | Backend client: turns requests into command lines for the bundled Node backend and decodes JSON replies. |
 | `lisp/etaf-weread-model.el` | Session state, list/detail/highlight loading, selection, panes, layout fitting and the public actions. |
 | `lisp/etaf-weread-index.el` | Local SQLite index: schema, Data Controller and storage primitives through ETAF DB. |
 | `lisp/etaf-weread-library.el` | Local book library: directory scan and TXT, Markdown and EPUB parsing into backend-shaped chapters. |
@@ -88,31 +88,29 @@ local book is opened (`etaf-weread-local-note-matching`).
 
 ## Account binding and progress write-back
 
-The account book of a local file is owned by the `weread` skill
+The account book of a local file is owned by the bundled backend
 (`bindings.json` in its private data directory), not by the reader: the model
 loads it through the ordinary `:bind` request and keeps the answer in
 `:local-bindings`.  Each entry carries the account book id, its title, and the
 account's progress; the model decorates the local rows with that percent and
 `etaf-weread--cloud-progress` gives the reading head the number beside the
-local one.  Nothing about the binding is cached across the skill's own file, so
+local one.  Nothing about the binding is cached across the backend's own file, so
 a rebind is visible on the next load.
 
 `etaf-weread-sync-progress` is the only write path.  After the reader confirms,
 the model sends `:sync-progress` with the open file, its chapter title, the
-local percent and `:yes`, and a wider `:timeout` because the skill drives the
+local percent and `:yes`, and a wider `:timeout` because the backend drives the
 controlled browser: the account's progress endpoint requires the official
 reader's own signature, so a plain HTTP replay is silently dropped and the
-skill opens the reader, jumps to the chapter and reads the account back.  The
+backend opens the reader, jumps to the chapter and reads the account back.  The
 reply's percent and chapter update the published binding, which is what the
 head and the row meter show after a sync.  A file without a binding makes the
 action signal before any request is sent.
 
 ## Data flow
 
-## Data flow
-
 ```text
-weread skill (JSON over stdout)
+backends/weread (JSON over stdout)
   → service: child process, decoded plist, (:ok ...) or (:error ...)
   → model: generation-guarded list/detail/notes loads write reactive refs
   → views: take plain values and callbacks
@@ -149,11 +147,11 @@ timer armed on start (`etaf-weread-prefetch-interval`) asks for one candidate
 at a time — the stalest list, or a list that was never loaded.  A background
 load never sets the loading state, never bumps the list generation a visible
 load owns, and is skipped while the reader is loading or has just opened;
-`etaf-weread--dispose` disarms the cache.  Failed loads report their skill
+`etaf-weread--dispose` disarms the cache.  Failed loads report their backend
 error code, so an expired login pauses the warmer until a foreground load
 succeeds and other failures back off; a reader that no window shows pauses the
 warmer as well.  The cache is a display shortcut only: the backend reply is
-still the source of truth, and the skill stays a thin data layer (no caching
+still the source of truth, and the backend stays a thin data layer (no caching
 there).
 
 ## Local index
@@ -168,7 +166,7 @@ so the storage is testable without the network and the backend conversation
 stays in one place.
 
 The index is a local copy for offline search. The server remains the authority
-for the account, and the `weread` skill remains the authority for the login.
+for the account, and the bundled backend remains the authority for the login.
 
 ## Invariants
 

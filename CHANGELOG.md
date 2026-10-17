@@ -4,6 +4,17 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- The WeChat Reading account backend now ships inside this package under
+  `backends/weread/` and no longer needs a Pi skill, `pi-skill`, or a separate
+  clone. Install `node` and sign in once through the bundled script. The
+  login, bindings, config and export defaults moved to
+  `~/.local/share/etaf-weread/` (or `$XDG_DATA_HOME/etaf-weread/`, or
+  `$ETAF_WEREAD_HOME`); move an existing `~/.pi/agent/local/skills/weread/`
+  there once to keep the login and bindings. `etaf-weread-skill-directory`
+  became `etaf-weread-backend-directory`, and `etaf-weread-doctor` reports
+  Node.js and the bundled script. The controlled browser used by `w` and by
+  browser login is an optional external capability: set `WEREAD_CDP_CHANNEL`.
+
 - `?` and `C-c h` now open the same searchable, read-only help dialog inside
   the reader. Effective bindings supply its labels; Escape or an outside
   click closes it and restores focus without splitting the window.
@@ -22,12 +33,12 @@ All notable user-visible changes to ETAF Weread.
   control the timer).
 
 - Local books can be bound to their WeChat Reading account book
-  (`pi-skill weread bind set`, or `bind auto --dir ~/ebooks`): the reading head
+  (`bind set`, or `bind auto --dir ~/ebooks`): the reading head
   shows the account progress beside the local one, the local list shows it as
   the row meter, and the highlights of the bound book are matched without a
   title guess.
 - `w` writes the reading place of the open local book back to the account; the
-  `weread` skill drives the official web reader for it because the account
+  bundled backend drives the official web reader for it because the account
   endpoint needs the reader's own signature.  The action confirms first and
   reports the account reply in the status line.
 

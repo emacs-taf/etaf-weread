@@ -2,7 +2,7 @@
 
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Author: ETAF contributors
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; Package-Requires: ((emacs "29.1") (etaf "0.2.1") (etaf-ui "0.1.0") (etaf-db "0.1.0"))
 ;; Keywords: hypermedia, ui
 ;; URL: https://github.com/emacs-taf/etaf-weread
@@ -33,6 +33,10 @@
 ;; implementations and precise docstrings remain beside their definitions, and
 ;; the manual contains workflows.
 ;;
+;; Function: etaf-weread-doctor ()
+;; Return capability facts for the reading client.  The shape matches
+;; `etaf-install-doctor': Node runs the bundled backend, and `unzip' is optional
+;; and only used to import a downloaded EPUB.
 ;; Function: etaf-weread-open (&optional model)
 ;;;###autoload (autoload 'etaf-weread-open "etaf-weread" nil t)
 ;; Mount the reader in `etaf-weread-buffer-name' and return its buffer.
@@ -235,9 +239,9 @@
 ;;
 ;; Function: etaf-weread-export-notes (app &optional item)
 ;; Export the highlights and thoughts of ITEM, or the selected book, as Markdown.
-;; The weread skill writes the file under its configured export directory and
-;; the reply is reported in the status line; a book without an id signals
-;; `etaf-weread-error'.
+;; The bundled backend writes the file under its configured export
+;; directory and the reply is reported in the status line; a book without an
+;; id signals `etaf-weread-error'.
 ;;
 ;; Function: etaf-weread-index-database ()
 ;; Return the SQLite database descriptor of the local notes index.
@@ -406,8 +410,8 @@
 ;; Function: etaf-weread-sync-progress (app)
 ;;;###autoload (autoload 'etaf-weread-sync-progress "etaf-weread" nil t)
 ;; Write APP's reading place of the open local book back to the account.
-;; The account's copy is updated by the official web reader, which the weread
-;; skill drives in the controlled browser because its progress endpoint needs
+;; The account's copy is updated by the official web reader, which the backend
+;; drives in the controlled browser because its progress endpoint needs
 ;; the reader's own signature; the call asks for confirmation first and
 ;; reports the account reply in the status line.  The reading head and the
 ;; local rows then show the refreshed account progress.  A local book without
@@ -543,8 +547,8 @@
 ;; book reply carries; an unreadable or unsupported file signals
 ;; `etaf-weread-error'.
 ;;
-;; Function: etaf-weread-make-client (&key skill-directory node-program timeout)
-;; Return a client that calls the `weread' backend of SKILL-DIRECTORY.
+;; Function: etaf-weread-make-client (&key backend-directory node-program timeout)
+;; Return a client that calls the backend in BACKEND-DIRECTORY.
 ;; NODE-PROGRAM runs the backend script, and TIMEOUT is the seconds a request
 ;; may take before it fails.  Every argument defaults to the matching
 ;; `etaf-weread-' variable, and the returned client is usable with
@@ -577,8 +581,9 @@
 ;; Return a text progress bar of WIDTH cells for PERCENT (0 to 100).
 ;; WIDTH defaults to 8; the filled part uses U+2588 and the remainder U+2591.
 ;;
-;; Variable: etaf-weread-skill-directory
-;; Directory of the `weread' backend scripts used by the default client.
+;; Variable: etaf-weread-backend-directory
+;; Directory of the backend scripts used by the default client. The backend
+;; ships inside this package; point it elsewhere only to try a modified copy.
 ;;
 ;; Variable: etaf-weread-node-program
 ;; Program used to run the backend's Node.js script.
@@ -587,8 +592,8 @@
 ;; Seconds a backend request may take before it fails with a timeout error.
 ;;
 ;; Variable: etaf-weread-export-directory
-;; Directory `etaf-weread-export-notes' passes to the skill, or nil for the
-;; skill's own configured default.
+;; Directory `etaf-weread-export-notes' passes to the backend, or nil for the
+;; backend's own configured default.
 ;;
 ;; Error: etaf-weread-error
 ;; Invalid reader operation, for example an unknown section, an empty search
@@ -606,6 +611,21 @@
 
 (require 'etaf-weread-theme)
 (require 'etaf-weread-service)
+
+(defun etaf-weread-doctor ()
+  "Return capability facts for the WeChat Reading client.
+The shape matches `etaf-install-doctor': :required and :optional lists of
+(LABEL AVAILABLE REMEDY).  Nothing is installed or changed."
+  (let ((backend (expand-file-name "weread.mjs" etaf-weread-backend-directory)))
+    (list :required
+          (list (list "Node.js" (and (executable-find etaf-weread-node-program) t)
+                      "Install Node.js 22 or newer with your system package manager; the backend ships with this package.")
+                (list "Bundled backend" (and (file-readable-p backend) t)
+                      "Reinstall etaf-weread; its backend ships inside the package."))
+          :optional
+          (list (list "unzip" (and (executable-find "unzip") t)
+                      "Optional: install unzip to import a downloaded EPUB.")))))
+
 (require 'etaf-weread-index)
 (require 'etaf-weread-library)
 (require 'etaf-weread-model)

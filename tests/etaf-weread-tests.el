@@ -34,7 +34,7 @@
 
 (defvar etaf-weread-tests--bindings nil
   "Local-book bindings the scripted client reports for `:bind'.
-Each entry follows the skill's shape: `:file', `:book_id', `:title' and a
+Each entry follows the backend's shape: `:file', `:book_id', `:title' and a
 `:progress' plist with `:percent' and `:chapter_idx'.")
 
 (defun etaf-weread-tests--books (&optional prefix)
@@ -330,7 +330,7 @@ share one file binds `etaf-weread-tests--settings' first."
     (should (equal opened "https://weread.qq.com/web/reader/1"))))
 
 (ert-deftest etaf-weread-tests-export-notes-sends-the-export-request ()
-  "Exporting the selected book sends the skill export and reports its reply."
+  "Exporting the selected book sends the backend export and reports its reply."
   (setq etaf-weread-tests--requests nil)
   (let ((app (etaf-weread-tests--session)))
     (etaf-weread-refresh app)
@@ -409,14 +409,14 @@ share one file binds `etaf-weread-tests--settings' first."
     (setq etaf-weread-tests--error nil)))
 
 (ert-deftest etaf-weread-tests-missing-backend-script-is-reported ()
-  "A client whose skill script is missing reports an error instead of signaling."
+  "A client whose backend script is missing reports an error instead of signaling."
   (let* ((directory (make-temp-file "etaf-weread-missing-" t))
          (app (etaf-weread-create
-               :client (etaf-weread-make-client :skill-directory directory))))
+               :client (etaf-weread-make-client :backend-directory directory))))
     (unwind-protect
         (progn
           (etaf-weread-refresh app)
-          (should (string-match-p "weread skill script is missing"
+          (should (string-match-p "weread backend script is missing"
                                   (plist-get (etaf-weread-state app) :message))))
       (delete-directory directory t))))
 
@@ -615,7 +615,7 @@ A successful foreground load clears the pause, so signing in again resumes it."
                          (push request etaf-weread-tests--requests)
                          (funcall callback
                                   (list :error "微信读书接口错误（登录超时）"
-                                        :hint "pi-skill weread login"
+                                        :hint "M-x etaf-weread-open 登录"
                                         :code "auth")))
                      (etaf-weread-tests--client request callback)))))
     (setq app (etaf-weread-tests--session client))
@@ -1279,7 +1279,7 @@ binding instead of a title lookup."
 (ert-deftest etaf-weread-tests-sync-progress-writes-the-local-place-back ()
   "The sync action confirms first, sends the local place, and refreshes the binding.
 The request carries the open file, its chapter name, the local percent and the
-explicit `:yes' the skill needs before it drives the browser."
+explicit `:yes' the backend needs before it drives the browser."
   (setq etaf-weread-tests--requests nil)
   (etaf-weread-tests--with-local-books directory
     (let* ((path (expand-file-name "local-a.txt" directory))
@@ -1553,17 +1553,15 @@ display rule must not turn it into a playground-style pane."
       (when (get-buffer etaf-weread-buffer-name)
         (kill-buffer etaf-weread-buffer-name)))))
 
-(ert-deftest etaf-weread-tests-default-client-runs-the-skill-script ()
-  "The default client passes the documented arguments to the skill script."
-  (let* ((directory (make-temp-file "etaf-weread-skill-" t))
-         (scripts (expand-file-name "scripts" directory))
-         (script (expand-file-name "weread.mjs" scripts))
+(ert-deftest etaf-weread-tests-default-client-runs-the-backend-script ()
+  "The default client passes the documented arguments to the bundled backend."
+  (let* ((directory (make-temp-file "etaf-weread-backend-" t))
+         (script (expand-file-name "weread.mjs" directory))
          (log (expand-file-name "calls.log" directory))
          (out (expand-file-name "export" directory))
          (reply nil))
     (unwind-protect
         (progn
-          (make-directory scripts t)
           (with-temp-file script
             (insert "import fs from 'node:fs';\n"
                     "fs.appendFileSync(process.env.WEREAD_TEST_LOG, process.argv.slice(2).join(' ') + '\\n');\n"
@@ -1571,7 +1569,7 @@ display rule must not turn it into a playground-style pane."
           (let* ((process-environment
                   (cons (concat "WEREAD_TEST_LOG=" log) process-environment))
                  (etaf-weread-export-directory out)
-                 (client (etaf-weread-make-client :skill-directory directory :timeout 10)))
+                 (client (etaf-weread-make-client :backend-directory directory :timeout 10)))
             (etaf-weread-client-call
              client (list :op :shelf :filter "reading" :limit 20)
              (lambda (result) (setq reply result)))
@@ -1592,25 +1590,23 @@ display rule must not turn it into a playground-style pane."
                                (format "export 42 --yes --json --quiet --out %s" out)))))))
       (delete-directory directory t))))
 
-(ert-deftest etaf-weread-tests-skill-refusal-reports-its-own-message ()
-  "A refused skill command reports the backend's own message.
-The weread skill answers a failure with a JSON object on stdout and a non-zero
+(ert-deftest etaf-weread-tests-backend-refusal-reports-its-own-message ()
+  "A refused backend command reports its own message.
+The bundled backend answers a failure with a JSON object on stdout and a non-zero
 exit, and the exit event can arrive before that output; the reader must drain
 the pipes before reading them.  A crash without JSON keeps the exit status."
-  (let* ((directory (make-temp-file "etaf-weread-refusal-skill-" t))
-         (scripts (expand-file-name "scripts" directory))
-         (script (expand-file-name "weread.mjs" scripts)))
+  (let* ((directory (make-temp-file "etaf-weread-refusal-backend-" t))
+         (script (expand-file-name "weread.mjs" directory)))
     (unwind-protect
         (progn
-          (make-directory scripts t)
           (with-temp-file script
             (insert "if (process.argv[2] === 'shelf') {\n"
-                    "  console.log(JSON.stringify({ ok: false, error: 'auth', message: '还没有微信读书登录态', hint: 'pi-skill weread login（打开受控浏览器扫码）' }));\n"
+                    "  console.log(JSON.stringify({ ok: false, error: 'auth', message: '还没有微信读书登录态', hint: 'M-x etaf-weread-open 打开受控浏览器扫码' }));\n"
                     "  process.exit(3);\n"
                     "}\n"
                     "console.error('boom');\n"
                     "process.exit(1);\n"))
-          (let* ((client (etaf-weread-make-client :skill-directory directory :timeout 10))
+          (let* ((client (etaf-weread-make-client :backend-directory directory :timeout 10))
                  (ask (lambda (request)
                         (let (reply)
                           (etaf-weread-client-call
@@ -1622,7 +1618,7 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
               (should (equal (cadr refusal) "还没有微信读书登录态"))
               (should (equal (plist-get (cddr refusal) :code) "auth"))
               (should (equal (plist-get (cddr refusal) :hint)
-                             "pi-skill weread login（打开受控浏览器扫码）")))
+                             "M-x etaf-weread-open 打开受控浏览器扫码")))
             (let ((crash (funcall ask (list :op :status))))
               (should (eq (car-safe crash) :error))
               (should (string-prefix-p "Backend command failed" (cadr crash)))

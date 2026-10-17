@@ -872,9 +872,6 @@ section, selection and loaded detail."
       (setq-local etaf-weread--model model)
       (setq-local truncate-lines t)
       (setq-local mode-line-format nil)
-      (setq-local emulation-mode-map-alists
-                  (cons 'etaf-weread--command-maps
-                        (remq 'etaf-weread--command-maps emulation-mode-map-alists)))
       ;; The reader owns every column it paints.  A sub-cell rounding
       ;; remainder must not surface as Emacs's truncation glyph, so keep the
       ;; truncation slot blank instead of advertising a cut line.
@@ -896,6 +893,15 @@ section, selection and loaded detail."
     (etaf-weread--sync-layout model (selected-window))
     (etaf-mount buffer (etaf-weread-view model)
                 (etaf-weread--viewport-options model (selected-window)))
+    ;; Mounting installs the runtime's scoped key map at the front of the
+    ;; buffer's emulation alist, and its RET always resolves to the generic
+    ;; activation, which rejects a point that is not on a Host.  The reader's
+    ;; map must stay in front: its RET activates the Host under point and
+    ;; otherwise opens the selection the arrows moved to.
+    (with-current-buffer buffer
+      (setq-local emulation-mode-map-alists
+                  (cons 'etaf-weread--command-maps
+                        (remq 'etaf-weread--command-maps emulation-mode-map-alists))))
     (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
     buffer))
 
