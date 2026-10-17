@@ -4,6 +4,11 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- Installing from the package archive now compiles every module: the entry
+  resolves its `lisp/` directory from the file being compiled, so an
+  installation started from a script cannot point the compiler at the script's
+  own directory.
+
 - The WeChat Reading account backend now ships inside this package under
   `backends/weread/` and no longer needs a Pi skill, `pi-skill`, or a separate
   clone. Install `node` and sign in once through the bundled script. The
