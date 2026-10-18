@@ -22,11 +22,11 @@
   :group 'applications)
 
 (defconst etaf-weread--palettes
-  '((dark :bg "#0F1216" :panel "#151A21" :panel2 "#1B212B" :panel3 "#232B37"
-          :line "#242C38" :ink "#E8ECF2" :muted "#9AA5B4" :dim "#66707F"
+  '((dark :bg "#191a1c" :panel "#202225" :panel2 "#25272b" :panel3 "#2b2e33"
+          :line "#303338" :ink "#E8ECF2" :muted "#9AA5B4" :dim "#66707F"
           :accent "#5B8DEF" :accent-soft "#1A2436" :gold "#E4B15E" :ok "#4FBF8B"
           :warn "#E4B15E" :danger "#FF7A85" :danger-bg "#3A1E24" :info "#6FB4E8"
-          :selected "#1B2330" :meter "#5B8DEF" :cover "#232B37" :quote "#8EA8D8")
+          :selected "#25272b" :meter "#5B8DEF" :cover "#2b2e33" :quote "#8EA8D8")
     (light :bg "#FFFFFF" :panel "#F7F8FA" :panel2 "#EDF0F4" :panel3 "#E1E6EC"
            :line "#E1E6EC" :ink "#1C2330" :muted "#5A6371" :dim "#8A93A0"
            :accent "#2F6FED" :accent-soft "#E8EFFD" :gold "#B07A16" :ok "#2E7D5B"
