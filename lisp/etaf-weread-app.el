@@ -12,8 +12,9 @@
 ;; section loads on mount, and the session's timers and in-flight requests are
 ;; released on unmount.
 ;;
-;; `etaf-weread-open' adds what a Component cannot own by itself: the buffer
-;; name, the buffer-local keymap, and the window-fitting page size.
+;; `etaf-weread-open' opens the reader as an ETAF application: the buffer, the
+;; root keys, the canvas background and the window-fitting layout and page
+;; size.
 
 ;;; Code:
 
@@ -28,16 +29,13 @@
 (require 'etaf-weread-views)
 
 ;;; ---------------------------------------------------------------------------
-;;; Buffer state and keymap
+;;; Buffer state and keys
 ;;; ---------------------------------------------------------------------------
 
 (defcustom etaf-weread-buffer-name "*ETAF 微信读书*"
   "Buffer opened by `etaf-weread-open'."
   :type 'string
   :group 'etaf-weread)
-
-(defvar-local etaf-weread--model nil
-  "Reader model shown by the current buffer's runtime.")
 
 (defconst etaf-weread--bindings
   '(("C-n" etaf-weread--next-item "下一项／向下阅读")
@@ -92,19 +90,11 @@
     ("T" etaf-weread--cycle-theme "切换深浅／纸色主题")
     ("C-c h" etaf-help "查看快捷键")
     ("q" etaf-weread-close "关闭阅读器"))
-  "Native reader bindings and their short help labels.")
-
-(defvar etaf-weread-mode-map
-  (let ((map (make-sparse-keymap)))
-    (dolist (binding etaf-weread--bindings)
-      (define-key map (kbd (car binding))
-                  (list 'menu-item (nth 2 binding) (nth 1 binding))))
-    map)
-  "Keymap of the buffer opened by `etaf-weread-open'.
-It keeps Ebox's TAB focus cycling and RET activation, and replaces the
-scrolling keys with reader commands: the arrows move the selection or
-scroll the chapter, v switches the side pane, and o opens the selected book
-in the browser.")
+  "Root keys of the reader and their short help labels.
+They replace the renderer's scrolling keys with reader commands: the wheel
+and page keys move the selection or scroll the chapter, `v' switches the side
+pane and `o' opens the selected book in the browser.  RET reaches a focused
+control first and otherwise opens the selection.")
 
 (defun etaf-weread--direction (direction)
   "Move the Weread selection or scroll the chapter with DIRECTION.
@@ -115,27 +105,9 @@ selection the reader promises instead of a row under a revealed point."
     ('up (save-excursion (etaf-weread--previous-item)) 'handled)
     (_ 'release)))
 
-(defvar etaf-weread--command-maps
-  (list (cons 'etaf-weread--model
-              (let ((map (make-sparse-keymap)))
-                ;; Raise only reader-owned keys above renderer minor modes,
-                ;; keeping their labels from the same binding declaration.
-                (dolist (binding etaf-weread--bindings)
-                  (when (member (car binding)
-                                '("<wheel-up>" "<wheel-down>" "n" "q"
-                                  "<next>" "<prior>" "C-v" "M-v" "SPC" "S-SPC" "RET"))
-                    (define-key map (kbd (car binding))
-                                (list 'menu-item (nth 2 binding) (nth 1 binding)))))
-                map)))
-  "Reader bindings that must beat the renderer's own minor-mode map.
-`emulation-mode-map-alists' entries take precedence over every minor mode, so
-this alist lets the reader replace renderer scroll keys (`n', `q' and the page
-keys) instead of having them silently shadowed.  The alist is enabled only in
-an opened reader buffer.")
-
 (defun etaf-weread--current-model ()
   "Return the model of the current reader buffer."
-  (or etaf-weread--model
+  (or (etaf-app-state)
       (user-error "Current buffer is not an etaf-weread reader")))
 
 ;;; ---------------------------------------------------------------------------
@@ -298,16 +270,11 @@ COLUMNS describes the event window; LAYOUT and PANE describe the reader."
       (etaf-weread-move-selection model (- (or (plist-get state :page-size) 10))))))
 
 (defun etaf-weread--activate ()
-  "Open the Host at point, or the selected book's detail or highlights.
-A click or TAB leaves its Host under point and the renderer activates it;
-moving the selection with the arrows leaves point where it was, and the
-reader then
-opens the book the selection points at."
+  "Open the selected book's detail or highlights.
+A focused control or the pressable Host at point takes RET before this root
+key, so this only runs where moving the selection left point."
   (interactive)
-  (condition-case nil
-      (etaf-activate)
-    (user-error
-     (etaf-weread-activate-selection (etaf-weread--current-model)))))
+  (etaf-weread-activate-selection (etaf-weread--current-model)))
 
 (defun etaf-weread--scroll-pane-down ()
   "Scroll the side pane one page down.
@@ -639,7 +606,7 @@ the view is replaced instead; the session keeps its content and timers."
           (let ((window (get-buffer-window buffer t))
                 (etaf-weread--remounting t))
             (etaf-unmount runtime)
-            (etaf-mount buffer (etaf-weread-view model)
+            (etaf-mount buffer (etaf-weread--app-view model)
                         (etaf-weread--viewport-options model window))
             (etaf-runtime-flush (etaf-runtime-for-buffer buffer))))))))
 
@@ -648,16 +615,8 @@ the view is replaced instead; the session keeps its content and timers."
   (interactive)
   (let ((model (etaf-weread--current-model)))
     (etaf-weread-cycle-theme model)
-    (when-let* ((buffer (plist-get model :buffer)))
-      (with-current-buffer buffer (etaf-weread--remap-canvas-face)))
     (etaf-weread--repaint-palette model)))
 
-(defun etaf-weread--remap-canvas-face ()
-  "Paint this buffer's unpainted cells with the palette background.
-Ebox paints whole character cells, so a window body that is not a whole number
-of cells keeps a sub-cell remainder at its right or bottom edge.  Remapping the
-default face shows the reader background there instead of the frame's."
-  (face-remap-set-base 'default (list :background (etaf-weread-color :bg))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Application Component and entry points
@@ -859,59 +818,41 @@ MODEL defaults to a new session, exactly as `etaf-weread-open' creates one;
 pass a session from `etaf-weread-create' to embed the reader in your own mount."
   (etaf-view (etaf-weread-app :model (or model (etaf-weread-create)))))
 
+(defun etaf-weread--app-view (model)
+  "Return the View `etaf-weread-open' mounts for MODEL, with the root keys."
+  (etaf-view (etaf-weread-app :model model :keys etaf-weread--bindings)))
+
 (defun etaf-weread-open (&optional model)
   "Open the WeChat Reading reader and return its buffer.
 MODEL defaults to a session from `etaf-weread-create', so the reader opens on
 the shelf with the signed-in account.  A caller-provided MODEL keeps its
-section, selection and loaded detail."
+section, selection and loaded detail.  The layout, page size and canvas
+height come from the window that shows the reader, so the first paint
+already fits it, and they follow each settled resize; a window whose lines a
+minibuffer borrows keeps its layout until they return.  Cells the reader
+does not paint, such as the sub-cell remainder at the window edge, take the
+palette background."
   (interactive)
   (let* ((model (or model (etaf-weread-create)))
-         (buffer (get-buffer-create etaf-weread-buffer-name)))
+         (buffer
+          (etaf-app-open
+           etaf-weread-buffer-name (etaf-weread--app-view model)
+           :state model
+           :background (lambda () (plist-get (etaf-weread--read model :theme) :ui-bg))
+           :on-fit (lambda (window)
+                     (plist-put model :buffer (current-buffer))
+                     (etaf-weread--sync-layout model window))
+           :mount-options (lambda (window)
+                            (etaf-weread--viewport-options model window)))))
     (plist-put model :buffer buffer)
-    (with-current-buffer buffer
-      (setq-local etaf-weread--model model)
-      (setq-local truncate-lines t)
-      (setq-local mode-line-format nil)
-      ;; The reader owns every column it paints.  A sub-cell rounding
-      ;; remainder must not surface as Emacs's truncation glyph, so keep the
-      ;; truncation slot blank instead of advertising a cut line.
-      (setq-local buffer-display-table
-                  (let ((table (copy-sequence (or standard-display-table
-                                                  (make-display-table)))))
-                    (set-display-table-slot table 'truncation ?\s)
-                    table))
-      (etaf-weread--remap-canvas-face)
-      (use-local-map etaf-weread-mode-map))
-    ;; A native text app owns the window it was opened from: a general
-    ;; `display-buffer' rule must not split the frame into a playground-style
-    ;; pane, so open in the selected window and let the app fill it.
-    (let ((display-buffer-overriding-action '((display-buffer-same-window))))
-      (pop-to-buffer buffer))
-    ;; The layout, page size and viewport come from the window that shows the
-    ;; reader, so the first paint already fits it.  The reader adapts to later
-    ;; resizes as well (see `etaf-weread--sync-layout').
-    (etaf-weread--sync-layout model (selected-window))
-    (etaf-mount buffer (etaf-weread-view model)
-                (etaf-weread--viewport-options model (selected-window)))
-    ;; Mounting installs the runtime's scoped key map at the front of the
-    ;; buffer's emulation alist, and its RET always resolves to the generic
-    ;; activation, which rejects a point that is not on a Host.  The reader's
-    ;; map must stay in front: its RET activates the Host under point and
-    ;; otherwise opens the selection the arrows moved to.
-    (with-current-buffer buffer
-      (setq-local emulation-mode-map-alists
-                  (cons 'etaf-weread--command-maps
-                        (remq 'etaf-weread--command-maps emulation-mode-map-alists))))
     (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
     buffer))
 
 (defun etaf-weread-close ()
   "Unmount the reader and kill its buffer."
   (interactive)
-  (when-let* ((runtime (etaf-runtime-for-buffer etaf-weread-buffer-name)))
-    (etaf-unmount runtime))
-  (when-let* ((buffer (get-buffer etaf-weread-buffer-name)))
-    (kill-buffer buffer)))
+  (when (etaf-app-state etaf-weread-buffer-name)
+    (etaf-app-close etaf-weread-buffer-name)))
 
 (provide 'etaf-weread-app)
 ;;; etaf-weread-app.el ends here

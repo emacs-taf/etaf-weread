@@ -232,6 +232,11 @@
       "purpose": "A refused backend command surfaces its own JSON message, code and hint even though the exit event can arrive before the output; a crash without JSON keeps the exit status."
     },
     {
+      "name": "etaf-weread-tests-backend-timeout-and-cancel",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A slow backend request times out with its command line as the hint, and a cancelled request never calls back."
+    },
+    {
       "name": "etaf-weread-tests-local-binding-shows-account-progress",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "A bound local book shows the account progress in the row meter and publishes the binding for the reading head."

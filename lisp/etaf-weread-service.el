@@ -23,9 +23,9 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'json)
 (require 'seq)
 (require 'subr-x)
+(require 'etaf)
 (require 'etaf-weread-theme)
 
 (defcustom etaf-weread-backend-directory
@@ -66,12 +66,9 @@ It is called with no arguments and must return a client built by
 client; tests bind this to a fake client.")
 
 (cl-defstruct (etaf-weread--client (:constructor etaf-weread--client-create))
-  "Backend client that runs the bundled backend as child processes."
+  "Backend client that runs the bundled backend as child processes.
+PENDING lists the `etaf-process-run' jobs still in flight."
   backend-directory node-program timeout (pending nil))
-
-(cl-defstruct (etaf-weread--pending (:constructor etaf-weread--pending-create))
-  "One in-flight backend request."
-  process timer cancelled stdout stderr)
 
 (cl-defun etaf-weread-make-client (&key backend-directory node-program timeout)
   "Create a client that runs the bundled backend as child processes.
@@ -122,14 +119,9 @@ Cancelled requests never run their callbacks.  Return the number of cancelled
 requests, or 0 when CLIENT is not a subprocess client."
   (let ((count 0))
     (when (etaf-weread--client-p client)
-      (dolist (pending (etaf-weread--client-pending client))
-        (setf (etaf-weread--pending-cancelled pending) t)
-        (when-let* ((timer (etaf-weread--pending-timer pending)))
-          (cancel-timer timer))
-        (when-let* ((process (etaf-weread--pending-process pending)))
-          (when (process-live-p process)
-            (cl-incf count)
-            (delete-process process))))
+      (dolist (job (etaf-weread--client-pending client))
+        (when (etaf-process-cancel job)
+          (cl-incf count)))
       (setf (etaf-weread--client-pending client) nil))
     count))
 
@@ -215,93 +207,39 @@ with `--yes' because the reader asks before calling this function."
 (cl-defun etaf-weread--spawn (client program arguments callback &key timeout)
   "Run PROGRAM with ARGUMENTS for CLIENT; deliver its decoded JSON to CALLBACK.
 TIMEOUT overrides the client's deadline for this call, in seconds."
-  (let* ((stdout (generate-new-buffer " *etaf-weread-stdout*"))
-         (stderr (generate-new-buffer " *etaf-weread-stderr*"))
-         (pending (etaf-weread--pending-create :stdout stdout :stderr stderr))
-         (timeout (or timeout (etaf-weread--client-timeout client))))
-    (condition-case error
-        (progn
-          (setf (etaf-weread--pending-process pending)
-                (make-process
-                 :name "etaf-weread"
-                 :buffer stdout
-                 :stderr stderr
-                 :command (cons program arguments)
-                 :connection-type 'pipe
-                 :noquery t
-                 :coding 'utf-8-unix))
-          ;; The stderr pipe is a process of its own; without a sentinel Emacs
-          ;; appends a "Process ... finished" line to its buffer on exit,
-          ;; which is not backend output.
-          (let ((pipe (get-buffer-process stderr)))
-            (when pipe (set-process-sentinel pipe #'ignore))))
-      (error
-       (kill-buffer stdout)
-       (kill-buffer stderr)
-       (funcall callback (list :error (error-message-string error)))
-       (cl-return-from etaf-weread--spawn nil)))
-    (push pending (etaf-weread--client-pending client))
-    (setf (etaf-weread--pending-timer pending)
-          (run-at-time
-           timeout nil
-           (lambda ()
-             (setf (etaf-weread--pending-cancelled pending) t)
-             (when-let* ((process (etaf-weread--pending-process pending)))
-               (when (process-live-p process) (delete-process process)))
-             (setf (etaf-weread--client-pending client)
-                   (delq pending (etaf-weread--client-pending client)))
-             (funcall callback
-                      (list :error (format "Backend request timed out after %ss" timeout)
-                            :hint (mapconcat #'identity (cons program arguments) " "))))))
-    (set-process-sentinel
-     (etaf-weread--pending-process pending)
-     (lambda (process _event)
-       (when (memq (process-status process) '(exit signal failed))
-         (etaf-weread--settle client pending process callback))))
+  (let* ((timeout (or timeout (etaf-weread--client-timeout client)))
+         (command (cons program arguments))
+         (job nil))
+    (setq job (etaf-process-run
+               command :name "etaf-weread" :output 'json :timeout timeout
+               :callback
+               (lambda (result)
+                 (setf (etaf-weread--client-pending client)
+                       (delq job (etaf-weread--client-pending client)))
+                 (funcall callback
+                          (etaf-weread--result result command timeout)))))
+    (push job (etaf-weread--client-pending client))
     nil))
 
-(defun etaf-weread--settle (client pending process callback)
-  "Collect the result of PROCESS and finish PENDING for CLIENT.
-The callback is skipped when the request was cancelled."
-  (let ((stdout (etaf-weread--pending-stdout pending))
-        (stderr (etaf-weread--pending-stderr pending))
-        (cancelled (etaf-weread--pending-cancelled pending)))
-    (when-let* ((timer (etaf-weread--pending-timer pending)))
-      (cancel-timer timer))
-    (setf (etaf-weread--client-pending client)
-          (delq pending (etaf-weread--client-pending client)))
-    ;; An exited process can still have output in flight: the exit event can
-    ;; arrive before the pipes deliver what the backend wrote, so the JSON
-    ;; reply of a fast failure would be read as empty.  A zero timeout reads
-    ;; what is already in the pipes without waiting — the exit means the
-    ;; writer finished, so its bytes are in the kernel buffers — and it avoids
-    ;; the "Blocking call to accept-process-output with quit inhibited"
-    ;; warning a timeout-less wait would print from this sentinel.
-    (unless cancelled
-      (while (accept-process-output process 0))
-      (let ((pipe (get-buffer-process stderr)))
-        (while (and pipe (accept-process-output pipe 0)))))
-    (let ((output (with-current-buffer stdout (buffer-string)))
-          (errors (with-current-buffer stderr (buffer-string)))
-          (status (process-exit-status process)))
-      (kill-buffer stdout)
-      (kill-buffer stderr)
-      ;; Re-read the cancellation flag: draining the streams can run a timer
-      ;; that times this request out, which already delivered the failure.
-      (unless (or cancelled (etaf-weread--pending-cancelled pending))
-        (funcall callback
-                 (if (and (eq (process-status process) 'exit) (zerop status))
-                     (let ((data (etaf-weread--decode output)))
-                       (cond ((null data) (list :error "Backend returned no data"
-                                                :hint (string-trim errors)))
-                             ((eq (plist-get data :ok) :false)
-                              (etaf-weread--failure data errors))
-                             (t (list :ok data))))
-                   (let ((data (etaf-weread--decode output)))
-                     (if data
-                         (etaf-weread--failure data errors)
-                       (list :error (format "Backend command failed (exit %s)" status)
-                             :hint (string-trim errors))))))))))
+(defun etaf-weread--result (result command timeout)
+  "Return the client reply for the `etaf-process-run' RESULT of COMMAND.
+TIMEOUT is the deadline the command ran with, named in a timeout failure."
+  (let ((data (plist-get result :output))
+        (errors (or (plist-get result :stderr) "")))
+    (pcase (plist-get result :status)
+      ('timeout (list :error (format "Backend request timed out after %ss" timeout)
+                      :hint (mapconcat #'identity command " ")))
+      ('failed (list :error (plist-get result :message)))
+      ((and 'exit (guard (eql (plist-get result :exit) 0)))
+       (cond ((null data) (list :error "Backend returned no data"
+                                :hint (string-trim errors)))
+             ((eq (plist-get data :ok) :false) (etaf-weread--failure data errors))
+             (t (list :ok data))))
+      (_ (if data
+             (etaf-weread--failure data errors)
+           (list :error (format "Backend command failed (exit %s)"
+                                (plist-get result :exit))
+                 :hint (string-trim errors)))))))
 
 (defun etaf-weread--failure (data errors)
   "Return an (:error ...) result built from backend DATA and ERRORS.
@@ -317,17 +255,6 @@ kept beside the message so callers can throttle a failed refresh."
             (when (and code (stringp code) (not (string-equal code message)))
               (list :code code))
             (when (and hint (not (string-empty-p hint))) (list :hint hint)))))
-
-(defun etaf-weread--decode (output)
-  "Decode the first JSON object in OUTPUT, or nil."
-  (when (and output (not (string-empty-p (string-trim output))))
-    (condition-case nil
-        (json-parse-string (string-trim output)
-                           :object-type 'plist
-                           :array-type 'list
-                           :null-object nil
-                           :false-object :false)
-      (error nil))))
 
 (provide 'etaf-weread-service)
 ;;; etaf-weread-service.el ends here

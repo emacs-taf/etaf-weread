@@ -4,6 +4,15 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- The reader opens as an ETAF application: its keys are root keys of the
+  View, so RET reaches a focused control before it opens the selection, the
+  canvas follows the palette, and the layout follows each settled resize
+  without a reader-owned resize hook. It requires ETAF 0.3.0 and ETAF UI 0.2.0.
+
+- `etaf-weread-mode-map` is removed. The reader's keys are declared on its root
+  View; `C-c h` lists them. Keys the reader does not declare fall through to
+  your own bindings, so bind an extra command globally instead.
+
 - Installing from the package archive now compiles every module: the entry
   resolves its `lisp/` directory from the file being compiled, so an
   installation started from a script cannot point the compiler at the script's

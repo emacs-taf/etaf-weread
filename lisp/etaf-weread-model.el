@@ -2984,59 +2984,17 @@ rendered lines always agree."
 ;;; Session lifecycle
 ;;; ---------------------------------------------------------------------------
 
-(defvar etaf-weread--resize-timer nil
-  "Pending trailing task that applies the latest window sizes.")
-
-(defvar etaf-weread--resize-frames nil
-  "Frames whose window sizes changed since the last applied batch.")
-
-(defvar etaf-weread--resize-settle-delay 0.12
-  "Seconds of quiet after the last resize event before applying a layout.
-Applying the layout writes layout and page-size readings, and every write
-republishes the whole view.  Dragging an edge fires far more events than one
-publication costs, so apply once the drag settles instead of per event.")
-
-(defun etaf-weread--window-size-change (frame)
-  "Record FRAME's size change; apply it once the resize settles."
-  (when (frame-live-p frame)
-    (cl-pushnew frame etaf-weread--resize-frames)
-    (when etaf-weread--resize-timer
-      (cancel-timer etaf-weread--resize-timer))
-    (setq etaf-weread--resize-timer
-          (run-at-time etaf-weread--resize-settle-delay nil
-                       #'etaf-weread--window-size-change-apply))))
-
-(defun etaf-weread--window-size-change-apply ()
-  "Adapt every mounted reader to its window's settled size.
-The canvas refit itself is the framework's job: ETAF refits every mounted
-runtime once a resize settles.  This only recomputes the reader layout, page
-size and pane budgets that belong to the application.  A window whose lines
-an active minibuffer borrows keeps the layout the reader already committed
-until that UI releases them."
-  (setq etaf-weread--resize-timer nil)
-  (let ((frames (prog1 (nreverse etaf-weread--resize-frames)
-                  (setq etaf-weread--resize-frames nil))))
-    (dolist (frame frames)
-      (when (frame-live-p frame)
-        (dolist (window (window-list frame 'no-minibuf))
-          (let ((buffer (window-buffer window)))
-            (when (and (buffer-live-p buffer)
-                       (buffer-local-value 'etaf-weread--model buffer))
-              (let ((model (buffer-local-value 'etaf-weread--model buffer)))
-                (unless (etaf-transient-space-borrowed-p
-                         window (etaf-weread--read model :window-rows))
-                  (etaf-weread--sync-layout model window))))))))))
-
 (defun etaf-weread--start (app)
-  "Start APP: fit the layout, follow window resizes and warm the list cache.
+  "Start APP: fit the layout and warm the list cache.
+An opened reader refits the layout after each settled resize through its
+application window fit (see `etaf-weread-open').
 Lists are cached per section and shown at once; a slow background timer
 compares them with fresh replies and repaints only what changed, so the
 sidebar stays current without ever making the reader wait."
   (setf (plist-get app :disposed) nil
         (plist-get app :started-at) (float-time))
   (etaf-weread--sync-layout app)
-  (etaf-weread--schedule-prefetch app)
-  (add-hook 'window-size-change-functions #'etaf-weread--window-size-change))
+  (etaf-weread--schedule-prefetch app))
 
 (defun etaf-weread--dispose (app)
   "Release APP's timers, local index and in-flight requests.

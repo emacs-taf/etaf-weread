@@ -1535,7 +1535,7 @@ display rule must not turn it into a playground-style pane."
         (kill-buffer etaf-weread-buffer-name)))))
 
 (ert-deftest etaf-weread-tests-open-and-close-own-a-buffer ()
-  "Opening installs the reader keymap and closing kills the buffer."
+  "Opening paints a reader canvas whose keys beat renderer scrolling."
   (setq etaf-weread-tests--requests nil)
   (let ((etaf-weread-buffer-name " *etaf-weread-tests-open*")
         (app (etaf-weread-tests--session)))
@@ -1543,12 +1543,17 @@ display rule must not turn it into a playground-style pane."
         (let ((buffer (etaf-weread-open app)))
           (should (buffer-live-p buffer))
           (with-current-buffer buffer
-            (should (eq (current-local-map) etaf-weread-mode-map))
             (should-not mode-line-format)
+            (should (equal (plist-get (car (last (alist-get 'default face-remapping-alist)))
+                                      :background)
+                           (etaf-weread-color :bg)))
             (should (string-match-p "书1"
                                     (buffer-substring-no-properties
-                                     (point-min) (point-max)))))
-          (etaf-weread-close)
+                                     (point-min) (point-max))))
+            (let ((pane (plist-get (etaf-weread-state app) :pane)))
+              (execute-kbd-macro (kbd "v"))
+              (should-not (eq (plist-get (etaf-weread-state app) :pane) pane)))
+            (execute-kbd-macro (kbd "q")))
           (should-not (get-buffer etaf-weread-buffer-name)))
       (when (get-buffer etaf-weread-buffer-name)
         (kill-buffer etaf-weread-buffer-name)))))
@@ -1623,6 +1628,31 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
               (should (eq (car-safe crash) :error))
               (should (string-prefix-p "Backend command failed" (cadr crash)))
               (should (equal (plist-get (cddr crash) :hint) "boom")))))
+      (delete-directory directory t))))
+
+(ert-deftest etaf-weread-tests-backend-timeout-and-cancel ()
+  "A slow backend times out with its command as hint; a cancelled call never replies."
+  (let* ((directory (make-temp-file "etaf-weread-slow-backend-" t))
+         (script (expand-file-name "weread.mjs" directory)))
+    (unwind-protect
+        (progn
+          (with-temp-file script
+            (insert "setTimeout(() => console.log('{}'), 5000);\n"))
+          (let ((client (etaf-weread-make-client :backend-directory directory
+                                                 :timeout 0.3))
+                reply)
+            (etaf-weread-client-call client (list :op :status)
+                                     (lambda (result) (setq reply result)))
+            (should (etaf-weread-tests--wait (lambda () reply)))
+            (should (equal (cadr reply) "Backend request timed out after 0.3s"))
+            (should (string-match-p "weread\\.mjs status" (plist-get (cddr reply) :hint)))
+            (setq reply nil)
+            (etaf-weread-client-call client (list :op :status)
+                                     (lambda (result) (setq reply result)))
+            (should (= (etaf-weread-cancel client) 1))
+            (should (= (etaf-weread-cancel client) 0))
+            (sleep-for 0.5)
+            (should-not reply)))
       (delete-directory directory t))))
 
 (ert-deftest etaf-weread-tests-help-stays-in-reader ()

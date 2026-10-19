@@ -2,8 +2,8 @@
 
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Author: ETAF contributors
-;; Version: 0.1.3
-;; Package-Requires: ((emacs "29.1") (etaf "0.2.1") (etaf-ui "0.1.0") (etaf-db "0.1.0"))
+;; Version: 0.2.0
+;; Package-Requires: ((emacs "29.1") (etaf "0.3.0") (etaf-ui "0.2.0") (etaf-db "0.1.0"))
 ;; Keywords: hypermedia, ui
 ;; URL: https://github.com/emacs-taf/etaf-weread
 
@@ -44,10 +44,13 @@
 ;; the shelf with the account of the stored login.  A caller-provided MODEL
 ;; keeps its section, selection and loaded detail, and is revived when it was
 ;; displayed before.  It replaces the selected window instead of following
-;; `display-buffer' rules that might split the frame.  The buffer gets
-;; `etaf-weread-mode-map' and hides its mode line; closing the buffer releases
-;; the session's timers and pending requests, so a later `etaf-weread-open'
-;; with the same MODEL works again.
+;; `display-buffer' rules that might split the frame.  The buffer is an ETAF
+;; application (see `etaf-app-open'): its root keys replace the renderer's
+;; scrolling keys with reader commands, RET reaches a focused control before
+;; it opens the selection, the mode line is hidden, and the layout, page size
+;; and canvas height follow each settled resize of the window.  `C-c h' lists
+;; the keys.  Closing the buffer releases the session's timers and pending
+;; requests, so a later `etaf-weread-open' with the same MODEL works again.
 ;;
 ;; Function: etaf-weread-close ()
 ;;;###autoload (autoload 'etaf-weread-close "etaf-weread" nil t)
@@ -271,10 +274,6 @@
 ;;
 ;; Variable: etaf-weread-buffer-name
 ;; Buffer `etaf-weread-open' mounts the reader into.
-;;
-;; Variable: etaf-weread-mode-map
-;; Keymap installed by `etaf-weread-open'.  It keeps Ebox's TAB focus cycling
-;; and replaces the scrolling keys with reader commands.
 ;;
 ;; Variable: etaf-weread-page-size
 ;; Book rows shown at once.  `etaf-weread-open' replaces it with the count that
