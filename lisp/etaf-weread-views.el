@@ -663,6 +663,11 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
 ;;; Footer
 ;;; ---------------------------------------------------------------------------
 
+(defun etaf-weread--viewport-columns ()
+  "Return the mounted viewport width in character columns."
+  (max 20 (floor (/ (or (car (etaf-viewport)) (* 80 (frame-char-width)))
+                    (frame-char-width)))))
+
 (defconst etaf-weread--footer-hint
   "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"
   "Binding summary at the right edge of the reader's status bar.
@@ -694,7 +699,10 @@ shortens itself instead of clipping the binding summary."
     (box :if (not compact) :flex-grow 1 :flex-basis '(ch 0) :min-width '(ch 0)
          :height '(lh 1) :overflow 'hidden
          :color (etaf-weread-color (if error :danger :dim))
-      (text (expr (or message summary ""))))
+      (text (expr (etaf-weread--clip
+                   (or message summary "")
+                   (max 12 (- (etaf-weread--viewport-columns)
+                              (+ 24 4 4 (string-width (or hint etaf-weread--footer-hint)))))))))
     (box :if (not compact)
          :width (list 'ch (string-width (or hint etaf-weread--footer-hint)))
          :flex-shrink 0 :height '(lh 1) :text-align 'right :overflow 'hidden
