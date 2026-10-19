@@ -1,7 +1,9 @@
 .DEFAULT_GOAL := check
 .NOTPARALLEL:
 EMACS ?= emacs
-PROVIDER_ROOT := $(if $(wildcard ../etaf/etaf.el),..,../..)
+# Providers are siblings in the workspace and in a standalone clone;
+# override PROVIDER_ROOT to pin another checkout.
+PROVIDER_ROOT ?= ..
 LOAD_PATH = -L . -L lisp -L tests -L $(PROVIDER_ROOT)/etaf -L $(PROVIDER_ROOT)/etaf-ui -L $(PROVIDER_ROOT)/etaf-db -L $(PROVIDER_ROOT)/ebox -L $(PROVIDER_ROOT)/ecss
 SOURCES = lisp/etaf-weread-theme.el lisp/etaf-weread-service.el lisp/etaf-weread-index.el
 SOURCES += lisp/etaf-weread-library.el

@@ -3,11 +3,11 @@
   "load_path": [
     ".",
     "tests",
-    "../../etaf",
-    "../../etaf-ui",
-    "../../etaf-db",
-    "../../ebox",
-    "../../ecss"
+    "../etaf",
+    "../etaf-ui",
+    "../etaf-db",
+    "../ebox",
+    "../ecss"
   ],
   "support": [],
   "cases": [

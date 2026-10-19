@@ -166,8 +166,8 @@ backend. From a checkout with sibling providers:
 
 ```sh
 cd etaf-weread
-emacs -Q -L ../../ecss -L ../../ebox -L ../../etaf -L ../../etaf-ui \
-  -L ../../etaf-db -L . -l examples/etaf-weread-demo.el -f etaf-weread-demo-open
+emacs -Q -L ../ecss -L ../ebox -L ../etaf -L ../etaf-ui \
+  -L ../etaf-db -L . -l examples/etaf-weread-demo.el -f etaf-weread-demo-open
 ```
 
 ## Documentation
