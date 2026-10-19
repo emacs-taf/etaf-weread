@@ -379,8 +379,9 @@ share one file binds `etaf-weread-tests--settings' first."
   "Re-indexing a changed thought updates the stored row instead of adding one."
   (etaf-weread-tests--with-index
     (setq etaf-weread-tests--requests nil)
-    (let ((app (etaf-weread-tests--session)))
-      (setq etaf-weread-tests--thought "原来的想法")
+    ;; Bind the thought so the edit below does not leak into later tests.
+    (let ((app (etaf-weread-tests--session))
+          (etaf-weread-tests--thought "原来的想法"))
       (etaf-weread-show-book app "1" 'notes)
       (should (= (etaf-weread-index-search app "原来的想法") 1))
       (setq etaf-weread-tests--thought "改过的想法")
