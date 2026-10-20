@@ -1,13 +1,11 @@
-// 本机私有数据：登录态（auth.json，0600）、巡检状态（state.json）、配置（config.json）、
-// 本地书绑定台账（bindings.json）。默认放在 XDG 数据目录下的 `etaf-weread/`，
-// ETAF_WEREAD_HOME 可以把它整体挪到别处（测试与多账号用）。
+// 本机私有数据：登录态（auth.json，0600）、巡检状态（state.json）、配置（config.json）。
+// 默认放在 XDG 数据目录下的 `etaf-weread/`，ETAF_WEREAD_HOME 可以把它整体挪到别处
+// （测试与多账号用）。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fail } from './render.mjs';
 import { cliCommand } from './cli.mjs';
-
-export const STATE_VERSION_KEY = '_schemaVersion';
 
 export const dataDir = () => process.env.ETAF_WEREAD_HOME
   || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'etaf-weread');
@@ -26,36 +24,6 @@ function writeJson(file, value) {
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(tmp, file);
   try { fs.chmodSync(file, 0o600); } catch { /* 某些文件系统不支持 */ }
-}
-
-/** 读带版本号的状态文件；版本比当前新时不猜也不覆盖。 */
-export function loadVersioned(file, { version = 1 } = {}) {
-  let raw;
-  try {
-    raw = fs.readFileSync(file, 'utf8');
-  } catch (error) {
-    if (error.code === 'ENOENT') return { data: null, existed: false };
-    return { data: null, existed: false, error: 'unreadable', message: error.message };
-  }
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch (error) {
-    return { data: null, existed: true, error: 'unreadable', message: error.message };
-  }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return { data: null, existed: true, error: 'unreadable', message: '状态文件不是对象' };
-  }
-  const from = Number.isInteger(value[STATE_VERSION_KEY]) ? value[STATE_VERSION_KEY] : 0;
-  if (from > version) {
-    return { data: value, existed: true, error: 'newer', from };
-  }
-  return { data: value, existed: true, from };
-}
-
-export function saveVersioned(file, data, { version = 1 } = {}) {
-  writeJson(file, { ...data, [STATE_VERSION_KEY]: version });
-  return file;
 }
 
 /** 登录态：{ cookies, ua, name, vid, avatar, source, syncedAt, verifiedAt }。 */

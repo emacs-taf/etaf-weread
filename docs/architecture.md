@@ -9,7 +9,6 @@
 | `lisp/etaf-weread-service.el` | Backend client: turns requests into command lines for the bundled Node backend and decodes JSON replies. |
 | `lisp/etaf-weread-model.el` | Session state, list/detail/highlight loading, selection, panes, layout fitting and the public actions. |
 | `lisp/etaf-weread-index.el` | Local SQLite index: schema, Data Controller and storage primitives through ETAF DB. |
-| `lisp/etaf-weread-library.el` | Local book library: directory scan and TXT, Markdown and EPUB parsing into backend-shaped chapters. |
 | `lisp/etaf-weread-views.el` | Internal Components that take plain values and callbacks. |
 | `lisp/etaf-weread-app.el` | The `etaf-weread-app` Component, the buffer, the keymap and the reader commands. |
 
@@ -27,13 +26,9 @@ never show three columns the list cannot render in (below it the medium layout
 keeps a glyph rail and one pane at a time).  `etaf-weread--list-min-columns`
 records how many columns a full row spends outside its title.
 
-No row may be taller than the row height the page budget counted.  Chrome rows
-use the frame's line height; the reading column may scale its text (see
-Reading font), and then the model budgets the pitch that font really paints and
-hands the renderer a shorter canvas (`etaf-weread--reader-canvas-lines`), so a
-scaled chapter never paints past the window.  A row may be *shorter* than the
-budget — a blank or Latin-only row does not reach the height a CJK row does —
-so the invariant is "taller than the budget", not equality.
+No row may be taller than the row height the page budget counted.  A row may be
+*shorter* than the budget — a blank or Latin-only row does not reach the height
+a CJK row does — so the invariant is "taller than the budget", not equality.
 Fallback fonts are common offenders: a symbol can use Sarasa at 18px or Arial
 Unicode at 19px, and a bold symbol can make the row taller still.  The reader
 uses the shared `etaf-ui-icon' SVG set for its navigation, which is measured
@@ -46,66 +41,6 @@ with an accent edge, and the shared Tabs button uses its selected variant.
 Validate with `etaf-weread-gui-check` in `scripts/weread-gui-probe.el`: the
 canvas must fit the window, no row may exceed the budgeted row height, and
 every line must fit the body width.
-
-## Reading pane
-
-A local book needs no backend: the section scans
-`etaf-weread-library-directory`, and opening a file publishes its chapter text
-into the same side pane the card and the highlights use.  The model wraps the
-chapter to `etaf-weread--pane-content-columns` before publishing, so the pane
-counts and scrolls rows that are already the right width and no line is
-clipped; `<next>`/`<prior>` turn chapters while that pane is shown.
-
-## Reading font
-
-The `small`, `medium` and `large` presets scale only the reading column.  The
-engine converts CSS reference pixels to points before it resolves a font, and a
-frame defines how many pixels a point is, so the nominal size is not the size
-that gets painted; the model measures candidate sizes in the frame and keeps
-the one whose resolved font is closest to the preset's target
-(`etaf-weread--font-pixels-closest`).
-
-The row height is not the nominal line height either: a line is as tall as the
-tallest ascent plus the tallest descent of every font it uses, and a Chinese
-book mixes the frame's Latin font with a CJK fallback that is often one pixel
-taller.  `etaf-weread--font-line-pixels` probes both, the budget uses the
-taller result, and the canvas line count shrinks with it
-(`etaf-weread--reader-canvas-lines`), because the renderer plans its canvas in
-frame line heights.  Leaving the chapter restores the full-height canvas.
-
-## Local notes overlay
-
-`etaf-weread-match-local-notes` matches the account's highlights to the open
-local book.  A binding of the local file names the account book directly; only
-without one is the notebook searched for the local title (normalised without
-spaces and punctuation).  The best match's highlights are fetched, and each
-highlight is kept only when its whitespace-free text appears in the local
-chapters, so another edition contributes only the passages it shares.  The
-matches live in the session's `:local-notes`, and the model marks the wrapped
-lines they cover with `:note`, which the reading view paints with the accent
-surface.  Matching is asynchronous like every backend action and runs when a
-local book is opened (`etaf-weread-local-note-matching`).
-
-## Account binding and progress write-back
-
-The account book of a local file is owned by the bundled backend
-(`bindings.json` in its private data directory), not by the reader: the model
-loads it through the ordinary `:bind` request and keeps the answer in
-`:local-bindings`.  Each entry carries the account book id, its title, and the
-account's progress; the model decorates the local rows with that percent and
-`etaf-weread--cloud-progress` gives the reading head the number beside the
-local one.  Nothing about the binding is cached across the backend's own file, so
-a rebind is visible on the next load.
-
-`etaf-weread-sync-progress` is the only write path.  After the reader confirms,
-the model sends `:sync-progress` with the open file, its chapter title, the
-local percent and `:yes`, and a wider `:timeout` because the backend drives the
-controlled browser: the account's progress endpoint requires the official
-reader's own signature, so a plain HTTP replay is silently dropped and the
-backend opens the reader, jumps to the chapter and reads the account back.  The
-reply's percent and chapter update the published binding, which is what the
-head and the row meter show after a sync.  A file without a binding makes the
-action signal before any request is sent.
 
 ## Data flow
 

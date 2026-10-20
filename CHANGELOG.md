@@ -4,6 +4,21 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- Local books are removed.  The `本地书` section, the in-frame reading pane and
+  every action that existed only for a local file are gone: opening TXT,
+  Markdown or EPUB files, reading width and columns (`[`, `]`, `m`), reading
+  fonts (`F`), zen (`f`), auto-scroll (`a`), bookmarks (`b`, `B`), percentage
+  jumps (`%`), in-book search, dictionary lookup (`y`), the matched-account
+  highlight overlay (`N`, `M`), reading time records, stored positions and the
+  progress write-back (`w`).  `etaf-weread-library-directory`,
+  `etaf-weread-library-depth`, `etaf-weread-library-chapter-length` and the
+  other local-library options are removed, as are the backend's `bind` and
+  `sync-progress` commands and its `bindings.json` ledger.  The shelf,
+  notebook, book detail, highlights, store search, statistics, export, the
+  local highlight index and every key that drives them stay.  Remove the old
+  options from your configuration; an existing settings file is still read and
+  its extra keys are ignored.
+
 - `M-x etaf-weread-login` signs in (or refreshes) the account through the
   bundled backend — a signed-in controlled browser, the local Chrome session or
   a QR scan — and reloads the account, lists and statistics.  `M-x
@@ -29,23 +44,22 @@ All notable user-visible changes to ETAF Weread.
 - The WeChat Reading account backend now ships inside this package under
   `backends/weread/` and no longer needs a Pi skill, `pi-skill`, or a separate
   clone. Install `node` and sign in once through the bundled script. The
-  login, bindings, config and export defaults moved to
+  login, config and export defaults moved to
   `~/.local/share/etaf-weread/` (or `$XDG_DATA_HOME/etaf-weread/`, or
   `$ETAF_WEREAD_HOME`); move an existing `~/.pi/agent/local/skills/weread/`
-  there once to keep the login and bindings. `etaf-weread-skill-directory`
+  there once to keep the login. `etaf-weread-skill-directory`
   became `etaf-weread-backend-directory`, and `etaf-weread-doctor` reports
-  Node.js and the bundled script. The controlled browser used by `w` and by
-  browser login is an optional external capability: set `WEREAD_CDP_CHANNEL`.
+  Node.js and the bundled script. Browser login can use the controlled browser
+  described under `WEREAD_CDP_CHANNEL`.
 
 - `?` and `C-c h` now open the same searchable, read-only help dialog inside
   the reader. Effective bindings supply its labels; Escape or an outside
   click closes it and restores focus without splitting the window.
 
 - Opening the minibuffer (`M-x`, a completion popup or the reader's own
-  prompts) no longer shrinks the book list, the reading pane or the pane
-  budgets to the lines the prompt borrows. The reader keeps the layout it
-  committed for the window and returns to the full view unchanged once the
-  prompt closes.
+  prompts) no longer shrinks the book list or the pane budgets to the lines
+  the prompt borrows. The reader keeps the layout it committed for the window
+  and returns to the full view unchanged once the prompt closes.
 
 - Sidebar lists are shown from the session cache at once and compared with a
   fresh reply in the background: an unchanged list never repaints or resets
@@ -54,49 +68,6 @@ All notable user-visible changes to ETAF Weread.
   seconds; `etaf-weread-prefetch-lists` and `etaf-weread-prefetch-interval`
   control the timer).
 
-- Local books can be bound to their WeChat Reading account book
-  (`bind set`, or `bind auto --dir ~/ebooks`): the reading head
-  shows the account progress beside the local one, the local list shows it as
-  the row meter, and the highlights of the bound book are matched without a
-  title guess.
-- `w` writes the reading place of the open local book back to the account; the
-  bundled backend drives the official web reader for it because the account
-  endpoint needs the reader's own signature.  The action confirms first and
-  reports the account reply in the status line.
-
-- Local reading is a reading mode of its own: an open chapter takes the frame
-  body, its text sits in centered columns (as many as the pane holds, up to
-  four, or a pinned count via `m`), `[` and `]` adjust the width, `f` turns the
-  whole frame into reading surface, `T` cycles dark/light/sepia, paragraphs are
-  indented the way Chinese books print them, and the running head shows how
-  far the book is read.
-- Reading keys: the arrows and the wheel scroll line by line, `g`/`G`
-  jump to the start and end of the chapter, `c` picks a chapter from the
-  book's own list, and `v` returns to the book list.
-- Reading preferences (palette, column width, one or two columns, font size)
-  are stored in `etaf-weread-settings-file` and restored by the next session;
-  `F` cycles the reading font between small, the frame's own font and large,
-  and the row budget follows the chosen size.
-- Reading inside a local book has bookmarks (`b`, `B`), an in-book search
-  (`/`) that lists every occurrence and jumps to the chosen one, and a
-  percentage jump (`%`) that lands where the progress bar promises.
-- `a` turns on automatic reading: one line advances every
-  `etaf-weread-auto-scroll-interval` seconds, the next chapter follows the
-  current one, and the end of the book stops it.
-- `y` looks the selected text or the reading line up and shows the definition
-  below the reader: `youdao-dictionary` when its API credentials are set,
-  otherwise the macOS system dictionaries, through the replaceable
-  `etaf-weread-dictionary-function`.
-- The account's WeChat Reading highlights are matched to the open local book
-  by title and text, and the shared passages are painted on the local lines;
-  `N` walks the matches, `M` picks one, and the attached thought is reported.
-  `etaf-weread-local-note-matching` turns the overlay off.
-- A local book keeps its reading time and visited chapters in the settings
-  file (`etaf-weread-track-reading-time`); the status line reports them when
-  the book is opened and `etaf-weread-reading-stats' returns them.
-- A local book reopens where the last session stopped: the chapter is
-  restored exactly and the position inside it as a fraction, so it survives
-  a different frame size or reading width.
 - First complete reader: shelf with all/reading/finished filters, notebook,
   book detail with table of contents, highlights grouped by chapter, store
   search, reading statistics, Markdown export and opening a book in the web

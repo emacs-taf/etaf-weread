@@ -36,12 +36,6 @@ tabs:
 - Local highlight index: reading a book's highlights stores them in a SQLite
   database, and the index section searches the whole notebook offline; `I`
   walks and indexes the notebook in the background.
-- Local books: the `本地书` section lists the books in
-  `etaf-weread-library-directory`, and a TXT, Markdown or EPUB file opens as a
-  plain-text chapter that owns the frame body: centered columns (as many as
-  fit, up to four, or `m` to pin a count), adjustable width (`[` / `]`), line
-  and page scrolling, chapter jumps (`<next>` / `c`), a running head with the
-  reading progress and an indent-aware Chinese layout.
 - Export: the selected book's highlights and thoughts are written as Markdown
   by the bundled `weread` backend.
 - Open in the browser: the selected book opens in the WeChat Reading web reader.
@@ -108,10 +102,7 @@ node "$BACKEND/weread.mjs" logout                                 # forget the s
 ```
 
 `M-x etaf-weread-open` reports a missing or expired login in its status line and
-names `M-x etaf-weread-login`; `g` retries once you have signed in.  Writing the
-reading place back to the account (`w`) drives the official web reader through a
-controlled browser, so that one action needs a browser session; everything else
-works from the cookie alone.
+names `M-x etaf-weread-login`; `g` retries once you have signed in.
 
 ### 3. The Emacs package
 

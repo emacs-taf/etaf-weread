@@ -16,7 +16,6 @@
 ;;   (etaf-weread-gui-open "150x40")   ; mount the reader at a frame size
 ;;   (etaf-weread-gui-status)          ; one-line state for logging
 ;;   (etaf-weread-gui-keys "jj RET")   ; real keys through the command loop
-;;   (etaf-weread-gui-font 'large)     ; set the reading font preset
 ;;   (etaf-weread-gui-check)           ; layout invariants; nil when healthy
 ;;
 ;; `etaf-weread-gui-wait' polls until the shelf arrives, which keeps a probe
@@ -78,11 +77,6 @@ KEYS is a `kbd' string, so \"jj RET\" moves the selection twice and opens it."
     (execute-kbd-macro (kbd keys)))
   (etaf-weread-gui-status))
 
-(defun etaf-weread-gui-font (font)
-  "Set the probe reader's reading FONT preset and return the new status."
-  (etaf-weread-set-reading-font etaf-weread-gui--model font)
-  (etaf-weread-gui-status))
-
 (defun etaf-weread-gui-canvas-pixels ()
   "Return (TOTAL . TALL) for the reader canvas in the selected frame.
 TOTAL is the pixel height of every canvas line.  TALL counts the lines taller
@@ -91,9 +85,7 @@ way a font that falls back to a taller face does — is visible here.  A line
 shorter than the budget is fine: a blank or Latin-only row may not reach the
 height a CJK row does."
   (with-current-buffer (get-buffer etaf-weread-buffer-name)
-    (let* ((state (etaf-weread-gui--state))
-           (limit (max (frame-char-height)
-                       (or (plist-get state :reader-line-height) 0)))
+    (let* ((limit (frame-char-height))
            (total 0) (tall 0))
       (save-excursion
         (goto-char (point-min))
@@ -126,16 +118,6 @@ line height the page budget counts, and both binding hints must arrive whole."
                  (buffer-substring-no-properties (point-min) (point-max))))
          (state (etaf-weread-gui--state))
          (hints (cond
-                 ;; The reading-only layout hides the footer, so it has no
-                 ;; hint to arrive whole.
-                 ((plist-get state :zen) nil)
-                 ;; While a local chapter is open the reading pane carries its
-                 ;; own key hints instead of the list's; the narrow footer
-                 ;; keeps only the short one.
-                 ((eq (plist-get state :pane) 'reader)
-                  (if (eq (plist-get state :layout) 'narrow)
-                      (list "↑/↓ 逐行 · SPC 翻页" "c 选章")
-                    (list "↑/↓ 逐行 · SPC 翻页" "<next> 翻章 · v 书单 · c 选章")))
                  ((eq (plist-get state :layout) 'wide)
                   (list "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"))
                  ((eq (plist-get state :layout) 'narrow) (list "? 帮助"))
@@ -160,29 +142,6 @@ line height the page budget counts, and both binding hints must arrive whole."
                                                  hints)
                                  (format "hint not painted whole: %S" hints))))))
     problems))
-
-(defun etaf-weread-gui-font-pass (path)
-  "Check PATH under every reading font preset and return one report each.
-Each report is (FONT LINE-HEIGHT BUDGETED-ROWS (CANVAS-PIXELS WINDOW-PIXELS)
-PROBLEMS), where PROBLEMS is what `etaf-weread-gui-check' found, so a bad
-row height or an overflowing canvas is visible per preset."
-  (etaf-weread-gui-wait)
-  (etaf-weread-locate etaf-weread-gui--model :local)
-  (etaf-weread-open-local-book etaf-weread-gui--model path)
-  (etaf-weread-gui--flush)
-  (cl-loop for font in '(medium large small)
-           collect
-           (progn
-             (etaf-weread-set-reading-font etaf-weread-gui--model font)
-             (etaf-weread-gui--flush)
-             (let* ((state (etaf-weread-gui--state))
-                    (window (get-buffer-window etaf-weread-buffer-name t))
-                    (canvas (etaf-weread-gui-canvas-pixels)))
-               (list font
-                     (plist-get state :reader-line-height)
-                     (plist-get state :reader-rows)
-                     (list (car canvas) (window-pixel-height window))
-                     (etaf-weread-gui-check))))))
 
 (defun etaf-weread-gui--flush ()
   "Apply the renderer's retained updates to the probe buffer.

@@ -104,13 +104,9 @@ REQUEST is a plist whose `:op' selects one backend operation:
   :search    (:op :search :keyword \"三体\" :count 25)
   :stats     (:op :stats)                               aggregate reading stats
   :export    (:op :export :id \"3300144445\")            write the notes Markdown
-  :bind      (:op :bind)                    bindings and account progress
-  :sync-progress
-       (:op :sync-progress :file … :chapter-title … :percent 37 :yes t)
-                                          write the local place back
 
 A request may carry `:timeout SECONDS' to widen the subprocess deadline for
-one call; `sync-progress' needs it because it drives the controlled browser.
+one call; signing in needs it because the browser waits for a QR scan.
 
 CALLBACK receives exactly one of (:ok DATA), where DATA is the decoded JSON
 plist, or (:error MESSAGE :hint HINT) when the command failed, timed out or
@@ -189,20 +185,6 @@ with `--yes' because the reader asks before calling this function."
          (list "search" keyword "--count"
                (number-to-string (or (plist-get request :count) 25)))))
       (:stats (list "stats"))
-      (:bind (list "bind" "list" "--progress"))
-      (:sync-progress
-       (let ((file (plist-get request :file)))
-         (when (or (null file) (string-empty-p (format "%s" file)))
-           (signal 'etaf-weread-error '("sync-progress needs the local file path")))
-         (append (list "sync-progress" "--file" (format "%s" file))
-                 (when-let* ((title (plist-get request :chapter-title)))
-                   (unless (string-empty-p (format "%s" title))
-                     (list "--chapter-title" (format "%s" title))))
-                 (when-let* ((percent (plist-get request :percent)))
-                   (list "--percent" (number-to-string (round percent))))
-                 (when-let* ((pages (plist-get request :pages)))
-                   (list "--pages" (number-to-string pages)))
-                 (when (plist-get request :yes) (list "--yes")))))
       (:export
        (unless (and id (not (string-empty-p (format "%s" id))))
          (signal 'etaf-weread-error '("export needs a book id")))

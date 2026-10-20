@@ -6,7 +6,6 @@ EMACS ?= emacs
 PROVIDER_ROOT ?= ..
 LOAD_PATH = -L . -L lisp -L tests -L $(PROVIDER_ROOT)/etaf -L $(PROVIDER_ROOT)/etaf-ui -L $(PROVIDER_ROOT)/etaf-db -L $(PROVIDER_ROOT)/ebox -L $(PROVIDER_ROOT)/ecss
 SOURCES = lisp/etaf-weread-theme.el lisp/etaf-weread-service.el lisp/etaf-weread-index.el
-SOURCES += lisp/etaf-weread-library.el
 SOURCES += lisp/etaf-weread-model.el lisp/etaf-weread-views.el lisp/etaf-weread-app.el etaf-weread.el
 SOURCES += $(wildcard examples/*.el)
 SOURCES += scripts/weread-gui-probe.el

@@ -15,8 +15,6 @@ import { bookFromId, bookIdFromQuery, indexBooks, requireBook } from './lib/book
 import { mergeNotes, notesText } from './lib/notes.mjs';
 import { exportBooks, sanitizeName, countNotes } from './lib/export.mjs';
 import { loadAuth, saveAuth, clearAuth, loadState, saveState, cookieHeader, resolveExportDir, authPath } from './lib/store.mjs';
-import { loadBindings, getBinding, setBinding, removeBinding, bindingKey, scanLibrary, proposeBindings, pickChapter } from './lib/bindings.mjs';
-import { driveReaderToChapter } from './lib/reader-sync.mjs';
 import { readChromeCookies, listProfiles, MANUAL_COOKIE_HINT, currentPlatform } from './lib/chrome-cookies.mjs';
 import { readBrowserAuth, isLoggedInJar, launchBrowser, openLoginPanel, waitForBrowserLogin } from './lib/browser-auth.mjs';
 
@@ -92,23 +90,6 @@ const COMMANDS = {
     flags: { all: 'bool', out: 'string', force: 'bool', yes: 'bool' },
     run: cmdExport,
   },
-  bind: {
-    summary: '本地书 ↔ 微信读书书籍的绑定：list / set / remove / auto',
-    usage: 'bind list [--progress] [--dir 目录] | bind set <本地文件> <书名|bookId> | bind remove <本地文件> | bind auto --dir 目录 [--yes]',
-    detail: '绑定台账把一本本地文件（EPUB/TXT/Markdown）指到账号里的哪本书；进度写回与本地划线叠加都用它。\n'
-      + '        list 看已有绑定（--progress 附上云端进度；--dir 顺带列出库内还没绑定的文件）；\n'
-      + '        auto 按书名自动配对，默认只预览（--yes 才写入）；已有绑定不会被覆盖。',
-    flags: { progress: 'bool', dir: 'string', yes: 'bool' },
-    run: cmdBind,
-  },
-  'sync-progress': {
-    summary: '把本地阅读进度写回微信读书（默认预览，--yes 才动账号；经受控浏览器）',
-    usage: 'sync-progress --file <本地文件> [--chapter-title 章节名] [--percent 百分比] [--pages 页数] [--yes]',
-    detail: '把本地读到的位置写回微信读书账号：借官方阅读器本体完成（它的上报接口需要自己的签名，纯 HTTP 会被丢弃）。\n'
-      + '        默认只预览计划；--yes 才驱动受控浏览器跳章/翻页，然后回读书架进度确认。',
-    flags: { file: 'string', 'chapter-title': 'string', percent: 'int', pages: 'int', yes: 'bool' },
-    run: cmdSyncProgress,
-  },
 };
 
 function usageText(commandName) {
@@ -119,7 +100,7 @@ function usageText(commandName) {
   }
   const names = Object.keys(COMMANDS);
   const lines = [
-    'weread — 读你的微信读书数据：书架/进度、划线/想法、书籍信息、目录、搜索、统计；笔记导出 Markdown；本地书绑定与进度写回。',
+    'weread — 读你的微信读书数据：书架/进度、划线/想法、书籍信息、目录、搜索、统计；笔记导出 Markdown。',
     '',
     '用法: node weread.mjs <命令> [选项]',
     `后端目录: ${CLI_DIR}`,
@@ -595,235 +576,6 @@ async function cmdExport(flags, positional) {
     fields: { out: outDir, written: result.written.length, skipped: result.skipped.length, failed: result.failed.length },
     items: result.written.map(item => `· ${item.title} → ${item.file}（划线 ${item.highlights} · 想法 ${item.notes}）`),
     json: flags.json ? { data: result } : {},
-    asOf: nowIso(),
-  }, { json: flags.json, quiet: flags.quiet });
-}
-
-// ------------------------------------------------------------------ bind
-
-const requireBindings = () => {
-  try {
-    return loadBindings();
-  } catch (error) {
-    fail('internal', error.message, '检查文件权限；确认不需要就删掉它，再用 bind set 重建');
-  }
-};
-
-const bindingRows = (bindings, progressById) => Object.entries(bindings).map(([file, entry]) => {
-  const api = progressById?.get(entry.bookId) ?? null;
-  return {
-    file,
-    book_id: entry.bookId ?? '',
-    title: entry.title ?? '',
-    author: entry.author ?? '',
-    source: entry.source ?? 'manual',
-    bound_at: entry.boundAt ?? '',
-    progress: api ? {
-      percent: api.progress ?? 0,
-      chapter_idx: api.chapterIdx ?? null,
-      chapter_offset: api.chapterOffset ?? null,
-      reading_time: api.readingTime ?? 0,
-      update_time: api.updateTime ?? 0,
-    } : null,
-  };
-});
-
-async function cmdBind(flags, positional) {
-  const action = positional[0] ?? 'list';
-  if (action === 'list') {
-    const rows = bindingRows(requireBindings());
-    let progress = null;
-    if (flags.progress && rows.length) {
-      const auth = requireAuth();
-      const raw = await apiOf(auth, flags).shelf();
-      progress = new Map((raw.bookProgress ?? []).map(entry => [entry.bookId, shapeProgress(entry)]));
-    }
-    const decorated = bindingRows(requireBindings(), progress);
-    const unbound = flags.dir
-      ? scanLibrary(flags.dir).map(file => file.file).filter(file => !Object.hasOwn(requireBindings(), bindingKey(file)))
-      : [];
-    emit({
-      conclusion: `绑定 ${decorated.length} 本${unbound.length ? `；库内未绑定 ${unbound.length} 本` : ''}`,
-      fields: { bindings: decorated.length, unbound: unbound.length },
-      items: decorated.map(row => `· ${path.basename(row.file)} → 《${row.title || row.book_id}》${row.progress ? ` · 云端 ${row.progress.percent}%` : ''}`),
-      json: { data: { bindings: decorated, unbound } },
-      asOf: nowIso(),
-    }, { json: flags.json, quiet: flags.quiet });
-    return;
-  }
-  if (action === 'set') {
-    const file = positional[1];
-    const query = positional.slice(2).join(' ').trim();
-    if (!file || !query) fail('usage', 'bind set 需要：本地文件与书名/bookId', `${CLI} help bind`);
-    if (!fs.existsSync(file)) fail('notfound', `本地文件不存在：${file}`, '给存在的文件路径（绝对路径最稳）');
-    const auth = requireAuth();
-    const api = apiOf(auth, flags);
-    const { book } = await resolveBookForQuery(api, query);
-    let title = book.title;
-    let author = book.author ?? '';
-    if (title === book.bookId) {
-      // 裸 bookId 没有标题；能查就补上，查不到也不挡绑定。
-      try {
-        const info = await api.bookInfo(book.bookId);
-        title = info.title || title;
-        author = info.author || author;
-      } catch { /* 离线或登录态失效时保留 id 作标题 */ }
-    }
-    const saved = setBinding(file, { bookId: book.bookId, title, author, source: 'manual' });
-    emit({
-      conclusion: `已绑定：《${saved.entry.title}》 ↔ ${path.basename(saved.file)}`,
-      fields: { bound: 'yes', file: saved.file, book_id: saved.entry.bookId, book: saved.entry.title, source: saved.entry.source },
-      json: { data: { file: saved.file, binding: saved.entry } },
-      asOf: nowIso(),
-    }, { json: flags.json, quiet: flags.quiet });
-    return;
-  }
-  if (action === 'remove') {
-    const file = positional[1];
-    if (!file) fail('usage', 'bind remove 需要本地文件路径', `${CLI} help bind`);
-    const existed = removeBinding(file);
-    emit({
-      conclusion: existed ? `已解除绑定：${path.basename(file)}` : `没有绑定记录：${path.basename(file)}`,
-      fields: { bound: 'no', file: bindingKey(file), removed: existed ? 'yes' : 'no' },
-      json: { data: { file: bindingKey(file), removed: existed } },
-      asOf: nowIso(),
-    }, { json: flags.json, quiet: flags.quiet });
-    return;
-  }
-  if (action === 'auto') {
-    if (!flags.dir) fail('usage', 'bind auto 需要 --dir <本地书目录>', `${CLI} help bind`);
-    if (!fs.existsSync(flags.dir)) fail('notfound', `目录不存在：${flags.dir}`, '给包含 EPUB/TXT/Markdown 的目录');
-    const auth = requireAuth();
-    const api = apiOf(auth, flags);
-    const { shelfRaw, notebookRaw } = await requireShelfAndNotebook(api);
-    const proposals = proposeBindings(scanLibrary(flags.dir), [...indexBooks(shelfRaw, notebookRaw).values()]);
-    const matched = proposals.filter(proposal => proposal.book);
-    const disputed = proposals.filter(proposal => proposal.level === 'ambiguous');
-    if (!flags.yes) {
-      emit({
-        conclusion: `预览：可自动绑定 ${matched.length} 本，歧义 ${disputed.length} 本，未匹配 ${proposals.length - matched.length - disputed.length} 本（加 --yes 才写入）`,
-        fields: { matched: matched.length, ambiguous: disputed.length, unmatched: proposals.length - matched.length - disputed.length, dry_run: 'yes' },
-        items: matched.map(proposal => `· [${proposal.level}] 《${proposal.book.title}》 ↔ ${path.basename(proposal.file)}`)
-          .concat(disputed.slice(0, 8).map(proposal => `· [歧义] ${path.basename(proposal.file)}：${proposal.candidates.map(book => book.title).slice(0, 3).join(' / ')}`)),
-        json: { data: { proposals } },
-        asOf: nowIso(),
-      }, { json: flags.json, quiet: flags.quiet });
-      return;
-    }
-    const existing = requireBindings();
-    let written = 0;
-    for (const proposal of matched) {
-      if (Object.hasOwn(existing, bindingKey(proposal.file))) continue;
-      setBinding(proposal.file, { bookId: proposal.book.bookId, title: proposal.book.title, author: proposal.book.author ?? '', source: proposal.level });
-      written += 1;
-    }
-    const rows = bindingRows(requireBindings());
-    emit({
-      conclusion: `已写入 ${written} 条绑定（共 ${rows.length} 条）`,
-      fields: { written, bindings: rows.length, ambiguous: disputed.length },
-      items: rows.map(row => `· ${path.basename(row.file)} → 《${row.title || row.book_id}》`),
-      json: { data: { written, bindings: rows } },
-      asOf: nowIso(),
-    }, { json: flags.json, quiet: flags.quiet });
-    return;
-  }
-  fail('usage', `bind 没有这个子命令：${action}`, `${CLI} help bind`);
-}
-
-// ------------------------------------------------------------------ sync-progress
-
-/** 阅读器地址里的书标识：书籍接口 deepLink 的 v=…，退化到 encodeId / bookId。 */
-const readerEncodeId = (info, bookId) => {
-  const match = String(info?.deepLink ?? '').match(/[?&]v=([^&]+)/);
-  if (match) return decodeURIComponent(match[1]);
-  return info?.encodeId || bookId;
-};
-
-const shelfProgressOf = async (api, bookId) => {
-  const raw = await api.shelf();
-  return (raw.bookProgress ?? []).map(shapeProgress).find(entry => entry.bookId === bookId) ?? null;
-};
-
-/** 等账号进度落到目标章节；阅读器上报是异步的，所以轮询回读。 */
-const waitForChapter = async (api, bookId, chapter, timeoutMs) => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const entry = await shelfProgressOf(api, bookId);
-    if (entry && (entry.chapterUid === chapter.chapterUid || entry.chapterIdx === chapter.chapterIdx)) return entry;
-    if (Date.now() >= deadline) {
-      fail('timeout', `阅读器没有在 ${Math.round(timeoutMs / 1000)}s 内把进度上报到第 ${chapter.chapterIdx ?? '?'} 章`,
-        '重试一次；仍失败就在受控浏览器里手动打开这本书确认能正常跳章');
-    }
-    await sleep(1500);
-  }
-};
-
-async function cmdSyncProgress(flags, positional) {
-  const file = flags.file || positionalText(positional);
-  if (!file) fail('usage', '缺少 --file <本地文件>', `${CLI} help sync-progress`);
-  if (!fs.existsSync(file)) fail('notfound', `本地文件不存在：${file}`, '给存在的文件路径（绝对路径最稳）');
-  const binding = (() => {
-    try {
-      return getBinding(file);
-    } catch (error) {
-      fail('internal', error.message, '检查文件权限；确认不需要就删掉它，再用 bind set 重建');
-    }
-  })();
-  if (!binding?.bookId) {
-    fail('notfound', `这本本地书还没有绑定微信读书书籍：${file}`,
-      `${CLI} bind set "${file}" "<书名|bookId>"`);
-  }
-  const auth = requireAuth();
-  const api = apiOf(auth, flags);
-  const info = await api.bookInfo(binding.bookId);
-  const chaptersRaw = await api.chapters([binding.bookId]);
-  const chapters = (chaptersRaw.data?.[0]?.updated ?? []).map(shapeChapter);
-  if (!chapters.length) {
-    fail('notfound', `账号里没有《${info.title || binding.title || binding.bookId}》的目录`,
-      `${CLI} book ${binding.bookId}`);
-  }
-  const picked = pickChapter(chapters, { title: flags['chapter-title'], percent: flags.percent });
-  if (!picked) {
-    fail('notfound', `目录里没有匹配「${flags['chapter-title'] ?? `${flags.percent}%`}」的章节`,
-      `${CLI} book ${binding.bookId} 看目录`);
-  }
-  const chapter = picked.chapter;
-  const enc = readerEncodeId(info, binding.bookId);
-  const plan = {
-    file: bindingKey(file),
-    book_id: binding.bookId,
-    book: info.title || binding.title || '',
-    chapter: chapter.title,
-    chapter_idx: chapter.chapterIdx ?? '',
-    chapter_uid: chapter.chapterUid ?? '',
-    matched: picked.matched,
-    pages: flags.pages ?? 0,
-    url: `https://weread.qq.com/web/reader/${encodeURIComponent(enc)}`,
-  };
-  if (!flags.yes) {
-    emit({
-      conclusion: `预览：把《${plan.book}》读到第 ${chapter.chapterIdx ?? '?'} 章（${chapter.title}）；加 --yes 才同步`,
-      fields: { ...plan, dry_run: 'yes' },
-      items: [`· 匹配方式:${picked.matched}`, `· 阅读器:${plan.url}`],
-      json: { data: { ...plan, dry_run: true } },
-      asOf: nowIso(),
-    }, { json: flags.json, quiet: flags.quiet });
-    return;
-  }
-  const timeout = Math.min(timeoutMsOf(flags, 45), 60000);
-  const driven = await driveReaderToChapter({ enc, title: chapter.title, pages: plan.pages, timeoutMs: timeout });
-  const entry = await waitForChapter(api, binding.bookId, chapter, timeout);
-  emit({
-    conclusion: `已同步到微信读书：第 ${entry.chapterIdx ?? chapter.chapterIdx} 章 ${chapter.title}（云端 ${entry.progress ?? '?'}%）`,
-    fields: {
-      ...plan,
-      synced: 'yes',
-      progress: entry.progress ?? '',
-      chapter_offset: entry.chapterOffset ?? '',
-      reading_time: formatDuration(entry.readingTime ?? 0),
-      steps: driven.steps.length,
-    },
-    json: { data: { ...plan, synced: true, progress: entry.progress ?? null, chapter_offset: entry.chapterOffset ?? null, reading_time: entry.readingTime ?? null, steps: driven.steps } },
     asOf: nowIso(),
   }, { json: flags.json, quiet: flags.quiet });
 }

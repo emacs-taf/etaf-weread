@@ -29,28 +29,15 @@ the login is done.
 | --- | --- |
 | `↑` / `↓`, `C-n` / `C-p` | move the book selection |
 | wheel | select a book, or scroll the detail/highlight pane over it |
+| `<home>` / `<end>`, `G` | first / last book of the list |
+| `<next>` / `<prior>` | one page down / up the book list |
 | `RET`, double click | open the selected book (detail, or highlights in the notebook) |
 | `v` | switch the side pane between detail and highlights |
 | `C-v` / `M-v`, `SPC` / `S-SPC` | scroll the detail or highlight pane one page |
 | `d` / `P` | show the detail pane / the highlights of the selected book |
-| `RET` in `本地书` | open the selected local book's first chapter |
-| `f` | reading-only layout: the open chapter owns the frame |
-| `F` | cycle the reading font: small, medium (the frame's font), large |
-| `a` | start or stop automatic reading (one line every few seconds) |
-| `y` | look the selected text, or the reading line, up in the dictionary |
-| `N` / `M` | jump to the next matched WeChat highlight / choose one from a list |
-| `[` / `]` | narrow or widen the reading column (more or less inset) |
-| `m` | cycle reading columns: automatic, 1, 2 … as many as fit |
-| `↑` / `↓`, wheel | scroll the chapter line by line |
-| `g` / `G` | top / end of the open chapter |
-| `c` | jump to a chapter of the open local book |
-| `b` / `B` | bookmark the reading place / jump to one of the book's bookmarks |
-| `%` | jump to a percentage of the open local book |
-| `/` | search inside the open book while reading (the store otherwise) |
-| `w` | write the open local book's reading place back to the WeChat Reading account |
 | `o` | open the selected book in the WeChat Reading web reader |
 | `E` | export the selected book's highlights and thoughts as Markdown |
-| `s` `n` `i` `t` `L` | shelf, notebook, local notes index, statistics, local books |
+| `s` `n` `i` `t` | shelf, notebook, local notes index, statistics |
 | `1`–`7` | the sidebar sections in order |
 | `/` or `S` | search the WeChat Reading store |
 | `I` | index the notebook's highlights into the local database |
@@ -68,86 +55,9 @@ use two columns; compact windows use one scrolling column.
 In the local index section the search field filters the indexed highlights
 instead of the store, and `RET` opens the book of the selected highlight.
 
-## Reading a local book
-
-The `本地书` section lists every TXT, Markdown and EPUB file in
-`etaf-weread-library-directory` (default `~/ebooks`).  Opening one reads the
-file into chapters and starts reading:
-
-- while a chapter is open the reading pane owns the frame's body: the book
-  list steps aside and comes back when `v` leaves the text for the book card;
-- the text is wrapped to `etaf-weread-reading-measure` columns and the column
-  is centered, so a wide frame stays readable; `[` and `]` adjust the width
-  while reading and the choice is remembered;
-- a frame wide enough for more than one column shows as many as the pane
-  holds (up to four) side by side; `m` cycles automatic, one column, two and
-  so on, and the choice is remembered as well;
-- Chinese paragraphs start with the two-character indent while the chapter
-  heading stays flush, and the running head reports how far the book is read;
-- `↑`/`↓` and the wheel scroll line by line, `C-v`/`M-v` and
-  `SPC`/`S-SPC` scroll a page (both columns at once), `<next>`/`<prior>` turn
-  to the next and previous chapter, `g`/`G` jump to its start and end, `c`
-  picks a chapter from the book's own list, and `v` leaves the text for the
-  book list;
-- `a` reads for you: one line advances every
-  `etaf-weread-auto-scroll-interval` seconds, the end of a chapter turns to
-  the next one, and the last line of the book stops it; `a` again stops it
-  earlier;
-- `y` looks the selected text, or the line at the top of the visible chapter,
-  up with `etaf-weread-dictionary-function` and shows the definition below the
-  reader: a `youdao-dictionary` with its API key and secret configured wins,
-  and otherwise the macOS system dictionaries answer offline, so a word in an
-  English book is one key away;
-- a local book can be bound to its account book (`bind set <file> <书名>`, or
-  `bind auto --dir ~/ebooks`; run these through the bundled backend, see
-  README, "The bundled backend and its one-time login"): the reading head then shows
-  the account progress beside the local one (`36% · 云端 12%`), the local book
-  list shows the account progress as the row meter, and the binding pins which
-  account book the highlights are matched from;
-- `w` writes the reading place of the open local book back to the account.  The
-  account endpoint needs the reader's own signature, so the backend drives the
-  official web reader in a controlled browser (set `WEREAD_CDP_CHANNEL` to a
-  `cdp-channel.mjs`; without one, the action reports that the capability is
-  missing and everything else keeps working).  The action asks for
-  confirmation first, reports the account reply in the status line, and the
-  head updates to the number the account reported.  A local file without a
-  binding tells you the `bind set` command instead of guessing;
-- the account's highlights of the same book are matched to the local text
-  (`etaf-weread-local-note-matching'): opening a book finds it in the notebook
-  by title, keeps the highlights whose text the local edition shares, and
-  paints those lines with a tinted bar; `N` jumps to the next one (wrapping)
-  and `M` picks from the list, with the attached thought in the status line;
-- opening a book reports how long it was read and how many of its chapters
-  were opened (`etaf-weread-reading-stats'), so a long book shows its
-  accumulated time instead of starting from zero every session;
-- `F` cycles the reading font (small, medium, large); a scaled font shows
-  fewer rows of the chapter, wraps the text again and shrinks the canvas so
-  nothing is cut off at the bottom, and the choice is remembered (leaving the
-  chapter with `v` restores the full-height frame);
-- `f` gives the whole frame to the chapter (no navigation, hint or footer)
-  and `f` again brings the reader back; `T` cycles the palette;
-- the reading head names the book, the chapter number and the chapter title,
-  and the file is read from disk, so the account and the backend stay
-  untouched;
-- `b` bookmarks the place (the same key removes it), `B` jumps between the
-  book's bookmarks, `/` searches inside the book and jumps to a match, and
-  `%` jumps to a percentage of it;
-- reopening a book continues where the last session stopped: the chapter is
-  restored exactly and the position inside it as a fraction, so a different
-  frame size or reading width lands in the same place
-  (`etaf-weread-remember-positions' turns it off);
-- the reader also counts reading time and visited chapters per book
-  (`etaf-weread-track-reading-time', default on), reports them in the status
-  line when a book is opened, and keeps them in the settings file where
-  `etaf-weread-reading-stats' returns them.
-
-Only files the person already holds are read; a WeChat Reading title whose text
-lives behind the site's reader still opens in the browser with `o`.
-
-The chosen palette and reading width are stored in
-`etaf-weread-settings-file` (default
+The chosen palette is stored in `etaf-weread-settings-file` (default
 `<user-emacs-directory>/etaf-weread/settings.eld`), so the next session starts
-with them; a corrupt or unreadable file falls back to the defaults.
+with it; a corrupt or unreadable file falls back to the defaults.
 
 ## Sections
 
@@ -224,8 +134,8 @@ A session is headless:
 A client is a function of `(REQUEST CALLBACK)`; it answers through
 `etaf-weread-client-call`'s protocol (`(:ok DATA)` or
 `(:error MESSAGE :hint HINT)`) and may answer synchronously. Requests use
-`:op` `:status`, `:shelf`, `:notebook`, `:book`, `:notes`, `:search`, `:stats`
-or `:export`; `docs/architecture.md` describes the data shapes. Bind
+`:op` `:status`, `:login`, `:logout`, `:shelf`, `:notebook`, `:book`, `:notes`,
+`:search`, `:stats` or `:export`; `docs/architecture.md` describes the data shapes. Bind
 `etaf-weread-client-factory` to change the backend of every new session, or
 pass `:client` to `etaf-weread-create`. `examples/etaf-weread-demo.el` is a
 complete scripted account in one function.
