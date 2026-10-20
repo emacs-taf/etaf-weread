@@ -189,11 +189,11 @@ repaints, which is what a person feels as jank."
 
   ;; List navigation.
   (etaf-weread-gui-acceptance--step "list selection and paging"
-    (etaf-weread-gui-acceptance--keys "jj" 0.2)
-    (etaf-weread-gui-acceptance--check "j moves down"
+    (etaf-weread-gui-acceptance--keys "<down><down>" 0.2)
+    (etaf-weread-gui-acceptance--check "<down> moves down"
                                        (= 2 (plist-get (etaf-weread-gui-acceptance--state) :selection)))
     (etaf-weread-gui-acceptance--keys "<up>" 0.2)
-    (etaf-weread-gui-acceptance--check "k moves up"
+    (etaf-weread-gui-acceptance--check "<up> moves up"
                                        (= 1 (plist-get (etaf-weread-gui-acceptance--state) :selection)))
     (etaf-weread-gui-acceptance--keys "<end>" 0.2)
     (let ((state (etaf-weread-gui-acceptance--state)))
