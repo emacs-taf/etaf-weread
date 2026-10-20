@@ -949,7 +949,7 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
         (progn
           (with-temp-file script
             (insert "if (process.argv[2] === 'shelf') {\n"
-                    "  console.log(JSON.stringify({ ok: false, error: 'auth', message: '还没有微信读书登录态', hint: 'M-x etaf-weread-open 打开受控浏览器扫码' }));\n"
+                    "  console.log(JSON.stringify({ ok: false, error: 'auth', message: '还没有微信读书登录态', hint: 'M-x etaf-weread-login 扫码登录' }));\n"
                     "  process.exit(3);\n"
                     "}\n"
                     "console.error('boom');\n"
@@ -966,7 +966,7 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
               (should (equal (cadr refusal) "还没有微信读书登录态"))
               (should (equal (plist-get (cddr refusal) :code) "auth"))
               (should (equal (plist-get (cddr refusal) :hint)
-                             "M-x etaf-weread-open 打开受控浏览器扫码")))
+                             "M-x etaf-weread-login 扫码登录")))
             (let ((crash (funcall ask (list :op :status))))
               (should (eq (car-safe crash) :error))
               (should (string-prefix-p "Backend command failed" (cadr crash)))

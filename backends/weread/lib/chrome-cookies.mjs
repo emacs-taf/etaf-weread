@@ -83,10 +83,10 @@ export function safeStoragePassword({ service, account }) {
       password = execFileSync('security', ['find-generic-password', '-w', '-s', service, '-a', account], { encoding: 'utf8' }).trim();
     } catch (error) {
       fail('deps', `读不到钥匙串口令「${service}」：${String(error.stderr ?? error.message).trim().slice(0, 200)}`,
-        `在弹窗上点「始终允许」；或改用受控浏览器登录：${cliCommand()} login`);
+        `在弹窗上点「始终允许」；或改用内置扫码登录：${cliCommand()} login`);
     }
   }
-  if (!password) fail('deps', `钥匙串条目「${service}」是空的`, `或改用受控浏览器登录：${cliCommand()} login`);
+  if (!password) fail('deps', `钥匙串条目「${service}」是空的`, `或改用内置扫码登录：${cliCommand()} login`);
   keyCache.set(service, password);
   return password;
 }
