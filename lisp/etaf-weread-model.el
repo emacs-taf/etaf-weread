@@ -523,6 +523,20 @@ repaint the whole view for nothing."
   "Return APP's backend client."
   (plist-get app :client))
 
+(defconst etaf-weread--sign-in-command "M-x etaf-weread-login"
+  "Command the reader names when the account needs a login.")
+
+(defun etaf-weread--failure-message (message hint code)
+  "Return the status-line sentence of a failed request.
+MESSAGE is the backend's own sentence and CODE its stable error code.  A login
+failure names `etaf-weread-login' instead of the backend's command line,
+because that is the command the person can run from the reader; any other
+failure keeps the backend's hint beside its message."
+  (cond ((equal code "auth")
+         (format "%s：%s 登录" message etaf-weread--sign-in-command))
+        ((and hint (not (string-empty-p hint))) (format "%s（%s）" message hint))
+        (t message)))
+
 (cl-defun etaf-weread--call (app request &key on-ok on-error)
   "Send REQUEST for APP, routing a failure into the visible status line.
 ON-OK receives the reply data; ON-ERROR the failure message, its hint and the
@@ -533,9 +547,7 @@ backend failure, so nothing reaches the caller of a reader action."
         (fail (lambda (message hint code)
                 (etaf-weread--write app :error message)
                 (etaf-weread--write app :message
-                                    (if (and hint (not (string-empty-p hint)))
-                                        (format "%s（%s）" message hint)
-                                      message))
+                                    (etaf-weread--failure-message message hint code))
                 (when on-error (funcall on-error message hint code)))))
     (condition-case error
         (etaf-weread-client-call

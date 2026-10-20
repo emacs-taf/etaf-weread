@@ -4,6 +4,14 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- `M-x etaf-weread-login` signs in (or refreshes) the account through the
+  bundled backend — a signed-in controlled browser, the local Chrome session or
+  a QR scan — and reloads the account, lists and statistics.  `M-x
+  etaf-weread-logout` deletes the stored login and clears the account data from
+  the reader without touching the WeChat Reading account.  A missing or expired
+  login now reports `M-x etaf-weread-login` in the status line instead of the
+  backend's command line, and the bundled backend gains a `logout` command.
+
 - The reader opens as an ETAF application: its keys are root keys of the
   View, so RET reaches a focused control before it opens the selection, the
   canvas follows the palette, and the layout follows each settled resize

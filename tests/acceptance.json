@@ -27,6 +27,21 @@
       "purpose": "Refreshing loads the shelf rows, the account name and the reading statistics into one visible state."
     },
     {
+      "name": "etaf-weread-tests-login-sends-the-login-request-and-reloads",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Signing in sends the login request with the longer login deadline and, once it succeeds, reloads the account and the shelf into the reader."
+    },
+    {
+      "name": "etaf-weread-tests-logout-forgets-the-account-and-names-the-command",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "Signing out sends the logout request, drops the account, statistics and loaded rows, and names the Emacs login command in the status line."
+    },
+    {
+      "name": "etaf-weread-tests-login-failure-names-the-emacs-command",
+      "file": "tests/etaf-weread-tests.el",
+      "purpose": "A backend failure that needs a login is reported with the Emacs login command instead of the backend's command line."
+    },
+    {
       "name": "etaf-weread-tests-sections-are-navigable",
       "file": "tests/etaf-weread-tests.el",
       "purpose": "Every sidebar section opens and names itself, and an unknown section signals without changing the current one."
@@ -224,7 +239,7 @@
     {
       "name": "etaf-weread-tests-default-client-runs-the-backend-script",
       "file": "tests/etaf-weread-tests.el",
-      "purpose": "The default client runs the backend script with the documented arguments for a shelf filter and for an export with its directory."
+      "purpose": "The default client runs the backend script with the documented arguments for a shelf filter, an export with its directory, a login and a logout."
     },
     {
       "name": "etaf-weread-tests-backend-refusal-reports-its-own-message",

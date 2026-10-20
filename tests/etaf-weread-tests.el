@@ -82,6 +82,10 @@ The second book carries an orphan thought, so grouping is observable."
              (list :ok
                    (pcase (plist-get request :op)
                      (:status (list :ok t :login "ok" :name "测试读者" :vid "1"))
+                     (:login (list :ok t :login "ok" :name "测试读者" :vid "1"
+                                   :conclusion "登录成功：测试读者"))
+                     (:logout (list :ok t :login "out"
+                                    :conclusion "已退出微信读书：本机登录态已删除"))
                      (:shelf (list :ok t :books etaf-weread-tests--book-count
                                    :reading 1 :finished 0
                                    :data (list :shelf (etaf-weread-tests--books))))
@@ -200,6 +204,52 @@ share one file binds `etaf-weread-tests--settings' first."
     (should (memq :shelf (mapcar (lambda (request) (plist-get request :op))
                                  etaf-weread-tests--requests)))
     (should (= (plist-get state :list-total) 2))))
+
+(ert-deftest etaf-weread-tests-login-sends-the-login-request-and-reloads ()
+  "Signing in runs the backend login and loads the account it returns."
+  (setq etaf-weread-tests--requests nil)
+  (let ((app (etaf-weread-tests--session)))
+    (should (eq (etaf-weread-login app) app))
+    (let ((request (etaf-weread-tests--request :login)))
+      (should request)
+      (should (= (plist-get request :timeout) etaf-weread-login-timeout)))
+    (let ((state (etaf-weread-state app)))
+      (should (equal (plist-get (plist-get state :account) :name) "测试读者"))
+      (should-not (plist-get state :error))
+      (should (= (plist-get state :rows-total) 2)))))
+
+(ert-deftest etaf-weread-tests-logout-forgets-the-account-and-names-the-command ()
+  "Signing out drops the account data and shows the Emacs login command."
+  (setq etaf-weread-tests--requests nil)
+  (let ((app (etaf-weread-tests--session)))
+    (etaf-weread-refresh app)
+    (should (= (plist-get (etaf-weread-state app) :rows-total) 2))
+    (should (eq (etaf-weread-logout app) app))
+    (should (etaf-weread-tests--request :logout))
+    (let ((state (etaf-weread-state app)))
+      (should-not (plist-get state :account))
+      (should-not (plist-get state :stats))
+      (should-not (plist-get state :error))
+      (should (= (plist-get state :rows-total) 0))
+      (should (string-match-p "已退出" (plist-get state :message)))
+      (should (string-match-p "M-x etaf-weread-login" (plist-get state :message))))))
+
+(ert-deftest etaf-weread-tests-login-failure-names-the-emacs-command ()
+  "A failure needing a login names `etaf-weread-login', not the backend CLI."
+  (setq etaf-weread-tests--requests nil)
+  (let ((app (etaf-weread-tests--session
+              (lambda (request callback)
+                (push request etaf-weread-tests--requests)
+                (funcall callback
+                         (list :error "还没有微信读书登录态"
+                               :hint "node weread.mjs login"
+                               :code "auth"))))))
+    (etaf-weread-refresh app)
+    (let ((state (etaf-weread-state app)))
+      (should (equal (plist-get state :error) "还没有微信读书登录态"))
+      (should (string-match-p "还没有微信读书登录态" (plist-get state :message)))
+      (should (string-match-p "M-x etaf-weread-login" (plist-get state :message)))
+      (should-not (string-match-p "weread.mjs" (plist-get state :message))))))
 
 (ert-deftest etaf-weread-tests-sections-are-navigable ()
   "Every sidebar section opens and names itself; unknown sections signal."
@@ -1587,13 +1637,22 @@ display rule must not turn it into a playground-style pane."
              (lambda (result) (setq reply result)))
             (should (etaf-weread-tests--wait (lambda () reply)))
             (should (eq (car-safe reply) :ok))
+            (dolist (op '(:login :logout))
+              (setq reply nil)
+              (etaf-weread-client-call
+               client (list :op op)
+               (lambda (result) (setq reply result)))
+              (should (etaf-weread-tests--wait (lambda () reply)))
+              (should (eq (car-safe reply) :ok)))
             (with-temp-buffer
               (insert-file-contents log)
               (let ((lines (split-string (buffer-string) "\n" t)))
                 (should (equal (nth 0 lines)
                                "shelf --filter reading --limit 20 --json --quiet"))
                 (should (equal (nth 1 lines)
-                               (format "export 42 --yes --json --quiet --out %s" out)))))))
+                               (format "export 42 --yes --json --quiet --out %s" out)))
+                (should (equal (nth 2 lines) "login --json --quiet"))
+                (should (equal (nth 3 lines) "logout --json --quiet"))))))
       (delete-directory directory t))))
 
 (ert-deftest etaf-weread-tests-backend-refusal-reports-its-own-message ()

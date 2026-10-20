@@ -51,6 +51,13 @@ callback forever.  Callers see (:error MESSAGE)."
   :type 'number
   :group 'etaf-weread)
 
+(defcustom etaf-weread-login-timeout 300
+  "Seconds `etaf-weread-login' waits for the browser login.
+The backend waits up to three minutes for a QR scan, so signing in needs a
+wider deadline than `etaf-weread-request-timeout'."
+  :type 'number
+  :group 'etaf-weread)
+
 (defcustom etaf-weread-export-directory nil
   "Directory the backend writes exported Markdown into, or nil for its default.
 When non-nil it is passed to the backend as `--out', which wins over the
@@ -88,6 +95,8 @@ arguments (REQUEST CALLBACK), which is how tests inject a fake.
 REQUEST is a plist whose `:op' selects one backend operation:
 
   :status    (:op :status)                              the stored login
+  :login     (:op :login)                               sign in / refresh it
+  :logout    (:op :logout)                              delete the stored login
   :shelf     (:op :shelf :filter all :limit 200)        books and progress
   :notebook  (:op :notebook :limit 200)                 books with notes
   :book      (:op :book :id \"3300144445\")              info, TOC and progress
@@ -163,6 +172,8 @@ with `--yes' because the reader asks before calling this function."
         (limit (or (plist-get request :limit) 200)))
     (pcase op
       (:status (list "status"))
+      (:login (list "login"))
+      (:logout (list "logout"))
       (:shelf (append (list "shelf" "--filter"
                             (or (plist-get request :filter) "all"))
                       (list "--limit" (number-to-string limit))))

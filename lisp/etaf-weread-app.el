@@ -812,6 +812,107 @@ the session's timers and pending backend requests."
       (etaf-weread-export-notes app)
     (etaf-weread-error (etaf-weread--write app :message (error-message-string error)))))
 
+(defun etaf-weread--mounted-session ()
+  "Return the session of the mounted reader, or nil."
+  (etaf-app-state etaf-weread-buffer-name))
+
+(defun etaf-weread--login-sentence (result)
+  "Return what to show for a login or logout RESULT."
+  (if (eq (car result) :ok)
+      (or (etaf-weread--string (plist-get (cadr result) :conclusion))
+          "微信读书：已登录")
+    (let ((message (or (cadr result) "微信读书登录失败"))
+          (hint (plist-get (cddr result) :hint)))
+      (if (and hint (not (string-empty-p hint)))
+          (format "%s（%s）" message hint)
+        message))))
+
+(defun etaf-weread-login (&optional app)
+  "Sign in to WeChat Reading and load the account again.
+The bundled backend reuses a signed-in controlled browser, otherwise reads the
+local Chrome session, and otherwise opens the browser at the QR page and waits
+up to `etaf-weread-login-timeout' seconds for the scan.  APP defaults to the
+mounted reader: the progress and the reply are shown in its status line and
+the account, the lists and the statistics are reloaded when the login
+succeeds.  With no reader open the reply is reported in the echo area, and a
+reader opened while the browser waited is refreshed.  Return APP, or nil when
+the login ran without a session."
+  (interactive)
+  (let* ((app (or app (etaf-weread--mounted-session)))
+         (starting "正在登录微信读书：必要时在浏览器里扫码…"))
+    (if app
+        (progn
+          (etaf-weread--note app starting)
+          (etaf-weread--call
+           app (list :op :login :timeout etaf-weread-login-timeout)
+           :on-ok (lambda (data)
+                    (etaf-weread--note
+                     app (or (etaf-weread--string (plist-get data :conclusion))
+                             "微信读书：已登录"))
+                    (etaf-weread-refresh app))))
+      (message "%s" starting)
+      (etaf-weread-client-call
+       (etaf-weread-make-client)
+       (list :op :login :timeout etaf-weread-login-timeout)
+       (lambda (result)
+         (message "微信读书：%s" (etaf-weread--login-sentence result))
+         (when-let* ((mounted (and (eq (car result) :ok)
+                                   (etaf-weread--mounted-session))))
+           (etaf-weread-refresh mounted)))))
+    app))
+
+(defun etaf-weread--forget-account (app)
+  "Drop APP's account, its loaded lists and the open book.
+A reply still in flight is dropped too, so nothing repopulates the reader with
+the account that just signed out."
+  (setf (plist-get app :generation) (1+ (plist-get app :generation)))
+  (etaf-list-cache-disarm (plist-get app :list-cache))
+  (setf (plist-get app :list-cache) (etaf-list-cache-create :grace 3))
+  (etaf-batch
+    (etaf-weread--write app :account nil)
+    (etaf-weread--write app :summary "")
+    (etaf-weread--write app :stats nil)
+    (etaf-weread--write app :rows nil)
+    (etaf-weread--write app :list-total 0)
+    (etaf-weread--write app :selection 0)
+    (etaf-weread--write app :window-start 0)
+    (etaf-weread--write app :detail nil)
+    (etaf-weread--write app :notes nil)
+    (etaf-weread--write app :loading nil)
+    (etaf-weread--write app :error nil))
+  ;; The disarmed cache above still holds the signed-out account's lists; a
+  ;; mounted reader arms the refresh timer again for the fresh one, and a
+  ;; headless session never armed a timer.
+  (when (plist-get app :started-at)
+    (etaf-weread--schedule-prefetch app))
+  (etaf-weread--sync-pane-total app))
+
+(defun etaf-weread-logout (&optional app)
+  "Sign out of WeChat Reading and forget what was loaded from the account.
+Only the login saved by the bundled backend is deleted; the WeChat Reading
+account itself is left alone.  APP defaults to the mounted reader and drops
+its account, loaded lists and open book at once, naming
+`etaf-weread-login' in the status line.  With no reader open the reply is
+reported in the echo area.  Return APP, or nil when the logout ran without a
+session."
+  (interactive)
+  (let ((app (or app (etaf-weread--mounted-session))))
+    (if app
+        (progn
+          (etaf-weread--note app "正在退出微信读书登录…")
+          (etaf-weread--call
+           app (list :op :logout)
+           :on-ok (lambda (_data)
+                    (etaf-weread--forget-account app)
+                    (etaf-weread--note
+                     app (format "已退出登录：%s 重新登录"
+                                 etaf-weread--sign-in-command)))))
+      (etaf-weread-client-call
+       (etaf-weread-make-client) (list :op :logout)
+       (lambda (result)
+         (message "微信读书：%s" (etaf-weread--login-sentence result)))))
+    app))
+
 (defun etaf-weread-view (&optional model)
   "Return the reader View for MODEL.
 MODEL defaults to a new session, exactly as `etaf-weread-open' creates one;

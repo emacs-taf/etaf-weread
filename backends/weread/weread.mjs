@@ -14,7 +14,7 @@ import { WereadApi, shapeBook, shapeProgress, shapeChapter, shapeHighlight, shap
 import { bookFromId, bookIdFromQuery, indexBooks, requireBook } from './lib/books.mjs';
 import { mergeNotes, notesText } from './lib/notes.mjs';
 import { exportBooks, sanitizeName, countNotes } from './lib/export.mjs';
-import { loadAuth, saveAuth, loadState, saveState, cookieHeader, resolveExportDir, authPath } from './lib/store.mjs';
+import { loadAuth, saveAuth, clearAuth, loadState, saveState, cookieHeader, resolveExportDir, authPath } from './lib/store.mjs';
 import { loadBindings, getBinding, setBinding, removeBinding, bindingKey, scanLibrary, proposeBindings, pickChapter } from './lib/bindings.mjs';
 import { driveReaderToChapter } from './lib/reader-sync.mjs';
 import { readChromeCookies, listProfiles, MANUAL_COOKIE_HINT, currentPlatform } from './lib/chrome-cookies.mjs';
@@ -35,6 +35,13 @@ const COMMANDS = {
       + '        --from-chrome 读本机日常 Chrome（macOS）；--cookie 手工粘贴两个值。',
     flags: { cookie: 'string', 'from-chrome': 'bool', profile: 'string', browser: 'bool' },
     run: cmdLogin,
+  },
+  logout: {
+    summary: '清除本机保存的登录态（不动账号本身）',
+    usage: 'logout',
+    detail: '删掉本机的 auth.json；下一次读写数据前需要重新 login。',
+    flags: {},
+    run: cmdLogout,
   },
   status: {
     summary: '实时验证登录态与账号',
@@ -124,6 +131,7 @@ function usageText(commandName) {
     '常用:',
     '  node weread.mjs status        先看登录态',
     '  node weread.mjs login         首次/掉登录：扫码、读 Chrome 会话或粘贴 cookie',
+    '  node weread.mjs logout        清除本机登录态（不动账号）',
     '  node weread.mjs shelf         书架与进度',
     '  node weread.mjs notes         笔记本总览',
     '  node weread.mjs notes "书名"   某本书的划线/想法',
@@ -303,6 +311,19 @@ async function cmdLogin(flags) {
   emit({
     conclusion: `登录成功：${name || vid}`,
     fields: { login: 'ok', name, vid, source, cookies: Object.keys(auth.cookies).length, path: authPath() },
+    asOf: nowIso(),
+  }, { json: flags.json, quiet: flags.quiet });
+}
+
+// ------------------------------------------------------------------ logout
+
+async function cmdLogout(flags) {
+  const hadLogin = Boolean(loadAuth()?.cookies && Object.keys(loadAuth().cookies).length);
+  clearAuth();
+  saveState({ status: 'logged-out', at: nowIso() });
+  emit({
+    conclusion: hadLogin ? '已退出微信读书：本机登录态已删除' : '本机没有保存的微信读书登录态',
+    fields: { login: 'out', path: authPath() },
     asOf: nowIso(),
   }, { json: flags.json, quiet: flags.quiet });
 }

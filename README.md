@@ -79,8 +79,24 @@ highlight index (no external database is needed).
 ### 2. The bundled backend and its one-time login
 
 The account, cookie and highlight backend ships inside this package under
-`backends/weread/`; nothing else has to be installed or cloned.  Check the
-login and sign in once:
+`backends/weread/`; nothing else has to be installed or cloned.  Sign in once,
+from Emacs:
+
+```elisp
+(require 'etaf-weread)
+M-x etaf-weread-login
+```
+
+The command reuses a signed-in controlled browser, otherwise reads your local
+Chrome session, and otherwise opens the WeChat Reading login page and waits for
+the QR scan.  WeChat Reading only offers QR login, so this step needs you once;
+`etaf-weread-login-timeout` (default 300 seconds) is how long it waits.  The
+cookie is stored in the backend's data directory, and later reads go straight
+over HTTP.
+
+`M-x etaf-weread-logout` deletes that stored login and clears the account data
+from the open reader; the WeChat Reading account itself is unchanged.  The
+backend script remains available for a manual cookie without Emacs:
 
 ```sh
 BACKEND="$(dirname "$(locate-library etaf-weread)")/backends/weread"
@@ -88,18 +104,14 @@ node "$BACKEND/weread.mjs" status                                 # reports a mi
 node "$BACKEND/weread.mjs" login --from-chrome                    # macOS: reads the Chrome session
 # or paste the two cookie values from a signed-in browser:
 node "$BACKEND/weread.mjs" login --cookie "wr_vid=…; wr_skey=…"
+node "$BACKEND/weread.mjs" logout                                 # forget the stored login
 ```
 
-```elisp
-```
-
-WeChat Reading only offers QR login, so this step needs the user once.  The
-cookie is stored in the backend's own data directory; later reads go straight
-over HTTP.  `M-x etaf-weread-open` reports a missing or expired login in its
-status line with the command to rerun, and `g` retries once you have signed in.
-Writing the reading place back to the account (`w`) drives the official web
-reader through a controlled browser, so that one action needs a browser session;
-everything else works from the cookie alone.
+`M-x etaf-weread-open` reports a missing or expired login in its status line and
+names `M-x etaf-weread-login`; `g` retries once you have signed in.  Writing the
+reading place back to the account (`w`) drives the official web reader through a
+controlled browser, so that one action needs a browser session; everything else
+works from the cookie alone.
 
 ### 3. The Emacs package
 

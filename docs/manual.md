@@ -4,6 +4,25 @@
 not split the frame or defer to `display-buffer` rules; use `etaf-weread-view`
 to embed the reader in another layout.
 
+## Signing in
+
+`M-x etaf-weread-login` signs in through the bundled backend: it reuses a
+signed-in controlled browser, otherwise reads the local Chrome session, and
+otherwise opens the browser at the WeChat Reading login page and waits up to
+`etaf-weread-login-timeout` seconds for the QR scan.  The reader shows the
+progress and the reply in its status line and reloads the account, the lists
+and the statistics when the login succeeds; with no reader open the reply is
+reported in the echo area.
+
+`M-x etaf-weread-logout` deletes the login saved by the backend and clears the
+account, the loaded lists and the open book from the reader; the WeChat Reading
+account itself is unchanged, and the status line then names
+`etaf-weread-login` again.
+
+While the account is not signed in, the status line reports the backend's
+sentence and names `M-x etaf-weread-login`; `g` retries the current section once
+the login is done.
+
 ## Keys
 
 | Key | Command |
@@ -216,10 +235,12 @@ outside ETAF.
 
 ## Troubleshooting
 
-- **登录态失效**: the status line shows the backend message and its command;
-  sign in again through the bundled backend (`login --from-chrome`, `--cookie`
-  or the controlled browser; see README, "The bundled backend and its one-time
-  login") and press `g`.
+- **登录态失效**: the status line names `M-x etaf-weread-login`, which signs
+  in again through the bundled backend (a signed-in controlled browser, the
+  local Chrome session or a QR scan; `--cookie` stays available in the backend
+  script for a manual login) and then reloads the account and the lists.  Press
+  `g` to retry the current section instead.  `M-x etaf-weread-logout` deletes
+  the stored login and clears the account data from the reader.
 - **Empty shelf or notebook**: run the backend `status` (same section); a
   failing backend reply is reported in the status line, and the reader stays
   usable.

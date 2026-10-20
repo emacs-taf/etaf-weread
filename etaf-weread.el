@@ -59,6 +59,27 @@
 ;; and its in-flight backend requests; the session itself stays usable for a
 ;; later mount.
 ;;
+;; Function: etaf-weread-login (&optional app)
+;;;###autoload (autoload 'etaf-weread-login "etaf-weread" nil t)
+;; Sign in to WeChat Reading and load the account again.
+;; The bundled backend reuses a signed-in controlled browser, otherwise reads
+;; the local Chrome session, and otherwise opens the browser at the QR page and
+;; waits up to `etaf-weread-login-timeout' seconds for the scan.  APP defaults
+;; to the mounted reader, whose status line reports the progress and whose
+;; account, lists and statistics reload when the login succeeds; with no reader
+;; open the reply is reported in the echo area and a reader opened meanwhile is
+;; refreshed.  Return APP, or nil when the login ran without a session.
+;;
+;; Function: etaf-weread-logout (&optional app)
+;;;###autoload (autoload 'etaf-weread-logout "etaf-weread" nil t)
+;; Sign out of WeChat Reading and forget what was loaded from the account.
+;; Only the login saved by the bundled backend is deleted; the WeChat Reading
+;; account itself is unchanged.  APP defaults to the mounted reader and drops
+;; its account, loaded lists and open book at once, naming
+;; `etaf-weread-login' in its status line.  With no reader open the reply is
+;; reported in the echo area.  Return APP, or nil when the logout ran without a
+;; session.
+;;
 ;; Function: etaf-weread-view (&optional model)
 ;;;###autoload (autoload 'etaf-weread-view "etaf-weread" nil t)
 ;; Return the reader View for MODEL, defaulting to a new session.
@@ -560,8 +581,8 @@
 ;;
 ;; Function: etaf-weread-client-call (client request callback)
 ;; Send REQUEST to CLIENT and call CALLBACK once with its reply.
-;; REQUEST is a plist starting with `:op' (`:status', `:shelf', `:notebook',
-;; `:book', `:notes', `:search', `:stats' or `:export').  CALLBACK receives
+;; REQUEST is a plist starting with `:op' (`:status', `:login', `:logout',
+;; `:shelf', `:notebook', `:book', `:notes', `:search', `:stats' or `:export').  CALLBACK receives
 ;; `(:ok DATA)' on success and `(:error MESSAGE :hint HINT)' on failure, at
 ;; most once.  A failure the backend explains itself (its JSON `message' and
 ;; `error') keeps that message and code; only a crash without a reply falls
@@ -589,6 +610,11 @@
 ;;
 ;; Variable: etaf-weread-request-timeout
 ;; Seconds a backend request may take before it fails with a timeout error.
+;;
+;; Variable: etaf-weread-login-timeout
+;; Seconds `etaf-weread-login' waits for the browser login, default 300.
+;; The backend waits up to three minutes for a QR scan, so signing in needs a
+;; wider deadline than `etaf-weread-request-timeout'.
 ;;
 ;; Variable: etaf-weread-export-directory
 ;; Directory `etaf-weread-export-notes' passes to the backend, or nil for the
