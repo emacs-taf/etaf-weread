@@ -20,8 +20,12 @@ All notable user-visible changes to ETAF Weread.
   its extra keys are ignored.
 
 - `M-x etaf-weread-login` signs in (or refreshes) the account through the
-  bundled backend — a signed-in controlled browser, the local Chrome session or
-  a QR scan — and reloads the account, lists and statistics.  `M-x
+  bundled backend — its own browser window at the QR page, the local Chrome
+  session or `--cookie` — and reloads the account, lists and statistics.  The
+  browser login is self-contained now: the backend ships a CDP login client and
+  uses Chrome, Edge, Brave or Chromium (`WEREAD_BROWSER` overrides the binary)
+  with its own profile, so it no longer needs a Pi skill, `cdp-channel.mjs` or
+  `WEREAD_CDP_CHANNEL`.  `M-x
   etaf-weread-logout` deletes the stored login and clears the account data from
   the reader without touching the WeChat Reading account.  A missing or expired
   login now reports `M-x etaf-weread-login` in the status line instead of the
@@ -49,8 +53,7 @@ All notable user-visible changes to ETAF Weread.
   `$ETAF_WEREAD_HOME`); move an existing `~/.pi/agent/local/skills/weread/`
   there once to keep the login. `etaf-weread-skill-directory`
   became `etaf-weread-backend-directory`, and `etaf-weread-doctor` reports
-  Node.js and the bundled script. Browser login can use the controlled browser
-  described under `WEREAD_CDP_CHANNEL`.
+  Node.js and the bundled script.
 
 - `?` and `C-c h` now open the same searchable, read-only help dialog inside
   the reader. Effective bindings supply its labels; Escape or an outside

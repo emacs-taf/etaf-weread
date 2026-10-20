@@ -61,9 +61,12 @@
 ;; Function: etaf-weread-login (&optional app)
 ;;;###autoload (autoload 'etaf-weread-login "etaf-weread" nil t)
 ;; Sign in to WeChat Reading and load the account again.
-;; The bundled backend reuses a signed-in controlled browser, otherwise reads
-;; the local Chrome session, and otherwise opens the browser at the QR page and
-;; waits up to `etaf-weread-login-timeout' seconds for the scan.  APP defaults
+;; The bundled backend reuses its own signed-in browser, otherwise reads the
+;; local Chrome session, and otherwise opens a browser window at the QR page and
+;; waits up to `etaf-weread-login-timeout' seconds for the scan.  The browser
+;; profile is owned by the package (Chrome, Edge, Brave or Chromium; set
+;; `WEREAD_BROWSER' for another binary), so signing in needs no Pi skill or
+;; other external tool.  APP defaults
 ;; to the mounted reader, whose status line reports the progress and whose
 ;; account, lists and statistics reload when the login succeeds; with no reader
 ;; open the reply is reported in the echo area and a reader opened meanwhile is

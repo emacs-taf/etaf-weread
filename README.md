@@ -54,6 +54,7 @@ tabs:
 | Node.js 22 or newer | runs the backend client | `node --version` |
 | `etaf`, `etaf-ui`, `etaf-db`, `ebox`, `ecss` | the framework; each root entry must be on `load-path` | every checkout is readable |
 | Bundled `weread` backend | shelf, notes, login | ships inside the package; only Node.js is required |
+| Chrome, Edge, Brave or Chromium | opens the QR login page and reads its cookies; every read-only command works without it | `WEREAD_BROWSER=/path/to/browser` overrides the binary |
 
 The reader displays what the backend provides: the bundled `weread` backend owns
 the account, the cookie and the highlight index, and the app keeps a local SQLite
@@ -81,12 +82,14 @@ from Emacs:
 M-x etaf-weread-login
 ```
 
-The command reuses a signed-in controlled browser, otherwise reads your local
-Chrome session, and otherwise opens the WeChat Reading login page and waits for
-the QR scan.  WeChat Reading only offers QR login, so this step needs you once;
-`etaf-weread-login-timeout` (default 300 seconds) is how long it waits.  The
-cookie is stored in the backend's data directory, and later reads go straight
-over HTTP.
+The command reuses its own signed-in browser, otherwise reads your local Chrome
+session, and otherwise opens a browser window at the WeChat Reading login page
+and waits for the QR scan.  WeChat Reading only offers QR login, so this step
+needs you once; `etaf-weread-login-timeout` (default 300 seconds) is how long it
+waits.  The browser is a separate profile that ships with the package — any of
+Chrome, Edge, Brave or Chromium works, and `WEREAD_BROWSER` points at another
+binary — so no Pi skill or external tool is involved.  The cookie is stored in
+the backend's data directory, and later reads go straight over HTTP.
 
 `M-x etaf-weread-logout` deletes that stored login and clears the account data
 from the open reader; the WeChat Reading account itself is unchanged.  The

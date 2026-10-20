@@ -16,7 +16,7 @@ import { mergeNotes, notesText } from './lib/notes.mjs';
 import { exportBooks, sanitizeName, countNotes } from './lib/export.mjs';
 import { loadAuth, saveAuth, clearAuth, loadState, saveState, cookieHeader, resolveExportDir, authPath } from './lib/store.mjs';
 import { readChromeCookies, listProfiles, MANUAL_COOKIE_HINT, currentPlatform } from './lib/chrome-cookies.mjs';
-import { readBrowserAuth, isLoggedInJar, launchBrowser, openLoginPanel, waitForBrowserLogin } from './lib/browser-auth.mjs';
+import { readBrowserAuth, isLoggedInJar, launchBrowser, openLoginPanel } from './lib/browser-auth.mjs';
 
 const CLI = cliCommand();
 const sleep = (ms) => new Promise(resolve => { setTimeout(resolve, ms); });
@@ -27,9 +27,11 @@ const GLOBAL_FLAGS_HELP = '全局旗标: --json（机器可读） --quiet --time
 
 const COMMANDS = {
   login: {
-    summary: '获取/刷新登录态：受控浏览器扫码、日常 Chrome、或手工 cookie',
+    summary: '获取/刷新登录态：拉起浏览器扫码、日常 Chrome、或手工 cookie',
     usage: 'login [--cookie "wr_vid=…; wr_skey=…"] [--from-chrome [--profile Default]] [--browser] [--timeout 秒]',
-    detail: '不带参数：受控浏览器已登录就直接取；没在跑就替你启动，等微信扫码（默认 180 秒）。\n'
+    detail: '不带参数：已登录就直接取；没登录就打开一个独立的浏览器窗口停在微信读书登录页，\n'
+      + '        用微信扫码（默认等 180 秒），cookie 由本工具自己收。\n'
+      + '        机器上要有 Chrome / Edge / Brave / Chromium 之一；WEREAD_BROWSER 可指定路径。\n'
       + '        --from-chrome 读本机日常 Chrome（macOS）；--cookie 手工粘贴两个值。',
     flags: { cookie: 'string', 'from-chrome': 'bool', profile: 'string', browser: 'bool' },
     run: cmdLogin,
@@ -129,7 +131,7 @@ function usageText(commandName) {
 const requireAuth = () => {
   const auth = loadAuth();
   if (!auth?.cookies || !Object.keys(auth.cookies).length) {
-    fail('auth', '还没有微信读书登录态', `${CLI} login（打开受控浏览器扫码）`, { needHuman: true });
+    fail('auth', '还没有微信读书登录态', `${CLI} login（打开浏览器扫码）`, { needHuman: true });
   }
   return auth;
 };
@@ -210,13 +212,13 @@ async function cmdLogin(flags) {
       fail('platform', `自动读日常浏览器 cookie 只有 macOS 上实现了（当前平台 ${currentPlatform()}）`, MANUAL_COOKIE_HINT, { needHuman: true });
     }
     const chrome = tryChromeCookies(flags);
-    if (!chrome) fail('auth', '本机日常浏览器里没有可用的微信读书登录态', `先在 Chrome 里登录 weread.qq.com，再重跑；或者去掉 --from-chrome 用受控浏览器扫码`, { needHuman: true });
+    if (!chrome) fail('auth', '本机日常浏览器里没有可用的微信读书登录态', `先在 Chrome 里登录 weread.qq.com，再重跑；或者去掉 --from-chrome 用内置扫码登录`, { needHuman: true });
     found = { cookies: chrome.cookies, ua: '' };
     source = chrome.source;
   } else {
     const live = await readBrowserAuth().catch(() => null);
     if (live && isLoggedInJar(live.cookies)) {
-      // 受控浏览器的 cookie 形状对也可能早已被服务端判失效；验业务接口，失败就当没登录。
+      // 登录浏览器的 cookie 形状对也可能早已被服务端判失效；验业务接口，失败就当没登录。
       try {
         await verifyLogin(live.cookies, live.ua);
         found = live;
@@ -238,9 +240,9 @@ async function cmdLogin(flags) {
       }
     }
     if (!found) {
-      // 没有可用登录态：启动受控浏览器开扫码页，等扫完再验业务接口。
+      // 没有可用登录态：拉起登录浏览器停在扫码页，等扫完再验业务接口。
       if (!(await launchBrowser())) {
-        fail('deps', '启动受控浏览器失败', '受控浏览器不可用：确认 WEREAD_CDP_CHANNEL 指向 cdp-channel.mjs，或改用 --cookie / --from-chrome 登录', { needHuman: true });
+        fail('deps', '没找到可用的浏览器', '装一个 Chrome / Edge / Brave / Chromium，用 WEREAD_BROWSER 指定路径，或改用 --cookie / --from-chrome 登录', { needHuman: true });
       }
       await sleep(1500);
       await openLoginPanel();
@@ -262,7 +264,7 @@ async function cmdLogin(flags) {
         if (Date.now() >= deadline) break;
         await sleep(2500);
       }
-      if (!scanned) fail('blocked', '没等到扫码登录（超时）', `在受控浏览器窗口里用微信扫一扫；登录后重跑 ${CLI} login`, { needHuman: true });
+      if (!scanned) fail('blocked', '没等到扫码登录（超时）', `在浏览器窗口里用微信扫一扫；登录后重跑 ${CLI} login`, { needHuman: true });
       found = scanned;
       source = 'browser';
     }
