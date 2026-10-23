@@ -41,21 +41,36 @@
   "Palette of every supported appearance, keyed by mode.")
 
 (defcustom etaf-weread-theme-mode 'dark
-  "Appearance used by a new reader session.
+  "Appearance a new Emacs session starts with.
 `dark' (default) renders the reader's own dark surface, `light' the light one
 and `sepia' a warm paper surface for long reading.  This is independent of the
-active Emacs theme."
+active Emacs theme.  The running state is `etaf-weread--theme-mode'; this
+option only seeds it."
   :type '(choice (const :tag "Dark" dark) (const :tag "Light" light)
                  (const :tag "Sepia" sepia))
   :group 'etaf-weread)
 
+(defvar etaf-weread--theme-mode (etaf-ref etaf-weread-theme-mode)
+  "Live appearance of the reader.
+`T' and a panel's title-bar switch both write this cell, and the palette is
+derived from it, so the reader and its host show one state instead of two.")
+
+(defconst etaf-weread--theme-modes
+  '((dark . "深") (light . "浅") (sepia . "纸"))
+  "Appearance modes the reader offers its host, in display order.")
+
+(defun etaf-weread--current-mode (&optional mode)
+  "Return the palette mode to paint MODE, or the reader's live mode.
+An unknown mode falls back to `dark'."
+  (let ((mode (or mode (etaf-value etaf-weread--theme-mode))))
+    (if (assq mode etaf-weread--palettes) mode 'dark)))
+
 (defun etaf-weread-color (key &optional mode)
   "Return the palette color named KEY.
-MODE defaults to `etaf-weread-theme-mode'; an unknown mode falls back to
+MODE defaults to the reader's live mode; an unknown mode falls back to
 `dark'.  An unknown KEY signals `etaf-weread-error' instead of returning a
 fallback, because a typo would otherwise paint an invisible surface."
-  (let* ((mode (let ((mode (or mode etaf-weread-theme-mode)))
-                 (if (assq mode etaf-weread--palettes) mode 'dark)))
+  (let* ((mode (etaf-weread--current-mode mode))
          (palette (cdr (assq mode etaf-weread--palettes)))
          (color (plist-get palette key)))
     (unless (and (keywordp key) color)
@@ -64,10 +79,11 @@ fallback, because a typo would otherwise paint an invisible surface."
 
 (defun etaf-weread-theme-defaults (&optional mode)
   "Return the ETAF UI token plist for MODE.
-MODE defaults to `etaf-weread-theme-mode'.  The result is passed to
+MODE defaults to the reader's live mode.  The result is passed to
 `etaf-theme-provide' by the application so shared etaf-ui Components use the
 same colors as the reader's own Views."
-  (let* ((dark (eq (or mode etaf-weread-theme-mode) 'dark))
+  (let* ((mode (etaf-weread--current-mode mode))
+         (dark (eq mode 'dark))
          (bg (etaf-weread-color :bg mode))
          (panel (etaf-weread-color :panel mode))
          (panel3 (etaf-weread-color :panel3 mode))

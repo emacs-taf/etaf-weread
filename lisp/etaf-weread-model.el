@@ -195,7 +195,8 @@ other Lisp callers."
                        (etaf-weread-make-client))))
          (settings (etaf-weread--settings-read)))
     (when (memq (plist-get settings :theme) '(dark light sepia))
-      (setq etaf-weread-theme-mode (plist-get settings :theme)))
+      (setq etaf-weread-theme-mode (plist-get settings :theme))
+      (etaf-set-value etaf-weread--theme-mode etaf-weread-theme-mode))
     (list :client client
           :buffer nil
           :settings-file etaf-weread-settings-file
@@ -478,8 +479,9 @@ signals `etaf-weread-error'."
 The order is `dark', `light' then `sepia'; the choice is stored in
 `etaf-weread-settings-file' so the next session starts with it."
   (let* ((order '(dark light sepia))
-         (mode (or (cadr (memq etaf-weread-theme-mode order)) 'dark)))
+         (mode (or (cadr (memq (etaf-weread--current-mode) order)) 'dark)))
     (setq etaf-weread-theme-mode mode)
+    (etaf-set-value etaf-weread--theme-mode mode)
     (etaf-weread--write app :theme (etaf-weread-theme-defaults mode))
     (etaf-weread--settings-write app)
     (etaf-weread--note app (format "外观：%s"

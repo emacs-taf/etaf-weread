@@ -268,10 +268,11 @@
 ;; over.
 ;;
 ;; Variable: etaf-weread-theme-mode
-;; Palette used by `etaf-weread-color' and `etaf-weread-theme-defaults':
-;; `dark' (default), `light' or `sepia'.  A mounted reader replaces its view
-;; when the session's `:theme' value changes, which is what the reader's T key
-;; does, so every painted surface takes the new palette at once.
+;; Palette a new Emacs session starts with: `dark' (default), `light' or
+;; `sepia'.  The live mode is one reactive cell; the reader's T key and a
+;; panel's title-bar switch write it, and `etaf-weread-color' and
+;; `etaf-weread-theme-defaults' read it, so the reader and a panel framing it
+;; share one appearance state.
 ;;
 ;; Variable: etaf-weread-settings-file
 ;; File that stores the chosen appearance between sessions, default
@@ -291,8 +292,8 @@
 ;; untouched until `etaf-weread-index-notebook' is called.
 ;;
 ;; Function: etaf-weread-color (key &optional mode)
-;; Return the palette color for KEY, optionally reading MODE instead of
-;; `etaf-weread-theme-mode'.
+;; Return the palette color for KEY, optionally reading MODE instead of the
+;; reader's live mode.
 ;; KEY is one of `:bg', `:panel', `:panel2', `:panel3', `:line', `:ink',
 ;; `:muted', `:dim', `:accent', `:accent-soft', `:gold', `:ok', `:warn',
 ;; `:danger', `:danger-bg', `:info', `:selected', `:meter', `:cover' or

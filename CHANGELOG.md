@@ -4,6 +4,12 @@ All notable user-visible changes to ETAF Weread.
 
 ## Unreleased
 
+- The reader and a panel framing it share one appearance state: `T` and the
+  panel's title-bar switch write the same mode cell, the panel paints the
+  reader's palette, and the panel offers `深`, `浅` and `纸` with the current
+  one selected.  `etaf-weread-theme-mode` now seeds the live mode instead of
+  replacing it at runtime.
+
 - Local books are removed.  The `本地书` section, the in-frame reading pane and
   every action that existed only for a local file are gone: opening TXT,
   Markdown or EPUB files, reading width and columns (`[`, `]`, `m`), reading

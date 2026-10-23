@@ -462,22 +462,22 @@ share one file binds `etaf-weread-tests--settings' first."
 
 (ert-deftest etaf-weread-tests-theme-tokens-cover-both-palettes ()
   "Colours resolve per palette, and the UI defaults follow the mode."
-  (unwind-protect
-      (let ((etaf-weread-theme-mode 'dark))
-        (should (string-match-p "\\`#[0-9A-Fa-f]\\{6\\}\\'" (etaf-weread-color :accent)))
-        (should-error (etaf-weread-color :nonsense) :type 'etaf-weread-error)
-        (dolist (key '(:bg :panel :panel2 :panel3 :line :ink :muted :dim
-                       :accent :accent-soft :gold :ok :warn :danger :danger-bg
-                       :info :selected :meter :cover :quote))
-          (dolist (mode '(dark light))
-            (should (string-match-p "\\`#[0-9A-Fa-f]\\{6\\}\\'"
-                                    (etaf-weread-color key mode)))))
-        (let ((dark (etaf-weread-color :bg))
-              (defaults (etaf-weread-theme-defaults 'dark)))
-          (should (equal (plist-get defaults :ui-bg) dark))
-          (should (plist-get defaults :ui-accent))
-          (should-not (equal dark (etaf-weread-color :bg 'light)))))
-    (setq etaf-weread-theme-mode 'dark)))
+  (should (string-match-p "\\`#[0-9A-Fa-f]\\{6\\}\\'"
+                          (etaf-weread-color :accent 'dark)))
+  (should-error (etaf-weread-color :nonsense) :type 'etaf-weread-error)
+  (dolist (key '(:bg :panel :panel2 :panel3 :line :ink :muted :dim
+                 :accent :accent-soft :gold :ok :warn :danger :danger-bg
+                 :info :selected :meter :cover :quote))
+    (dolist (mode '(dark light sepia))
+      (should (string-match-p "\\`#[0-9A-Fa-f]\\{6\\}\\'"
+                              (etaf-weread-color key mode)))))
+  (let ((dark (etaf-weread-color :bg 'dark))
+        (defaults (etaf-weread-theme-defaults 'dark)))
+    (should (equal (plist-get defaults :ui-bg) dark))
+    (should (plist-get defaults :ui-accent))
+    (should-not (equal dark (etaf-weread-color :bg 'light)))
+    (should-not (equal (etaf-weread-theme-defaults 'sepia)
+                       (etaf-weread-theme-defaults 'light)))))
 
 (ert-deftest etaf-weread-tests-format-duration-and-progress-bar ()
   "Reading time and the text progress bar keep their documented shapes."
@@ -1052,6 +1052,40 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
               (should-not closed)))
         (when (buffer-live-p buffer)
           (with-current-buffer buffer (etaf-weread-close)))))))
+
+(defvar etaf-weread-tests--surface-model nil
+  "Reader session mounted by the surface host during a case.")
+
+(etaf-define-component etaf-weread-tests-surface-host (&key surface)
+  "Provide SURFACE to the reader mounted below."
+  :setup (etaf-surface-provide surface)
+  :view (expr (etaf-weread-view etaf-weread-tests--surface-model)))
+
+(ert-deftest etaf-weread-tests-declares-its-palette-to-a-host ()
+  "A panel frames the reader with the reader's own palette and switch.
+`etaf-weread-cycle-theme' writes the same mode cell the host's switch writes,
+so the palette and the selected mode are one appearance state."
+  (let ((surface (etaf-surface-create))
+        (buffer (generate-new-buffer " *etaf-weread-tests-surface*")))
+    (let ((etaf-weread-tests--surface-model (etaf-weread-tests--session)))
+      (unwind-protect
+          (progn
+            (etaf-mount buffer
+                        (etaf-view (etaf-weread-tests-surface-host
+                                    :surface surface))
+                        (list :viewport-width 1200 :viewport-height 40))
+            (should (equal '((dark . "深") (light . "浅") (sepia . "纸"))
+                           (etaf-surface-modes surface)))
+            (should (equal (etaf-weread-theme-defaults
+                            (etaf-value (etaf-surface-mode surface)))
+                           (etaf-value (etaf-surface-theme surface))))
+            ;; The reader's own switch writes the same cell.
+            (etaf-weread-cycle-theme etaf-weread-tests--surface-model)
+            (let ((mode (etaf-value (etaf-surface-mode surface))))
+              (should (assq mode (etaf-surface-modes surface)))
+              (should (equal (etaf-weread-theme-defaults mode)
+                             (etaf-value (etaf-surface-theme surface))))))
+        (when (buffer-live-p buffer) (kill-buffer buffer))))))
 
 (provide 'etaf-weread-tests)
 ;;; etaf-weread-tests.el ends here

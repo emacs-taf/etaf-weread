@@ -333,32 +333,12 @@ With prefix argument REFRESH, re-fetch books that are already indexed."
   (interactive)
   (etaf-weread-refresh (etaf-weread--current-model)))
 
-(defvar etaf-weread--remounting nil
-  "Non-nil while the view is replaced so the palette repaints.
-The unmount before the new mount must not dispose the session, and the mount
-itself must not fetch the current section again.")
-
-(defun etaf-weread--repaint-palette (model)
-  "Repaint MODEL's buffer after its palette changed.
-The Views resolve their colors from the palette when they render, and a
-Component instance is retained while its props are unchanged.  A palette
-change alone therefore leaves every painted surface with the old colors, so
-the view is replaced instead; the session keeps its content and timers."
-  (when-let* ((buffer (plist-get model :buffer)))
-    (when (buffer-live-p buffer)
-      (with-current-buffer buffer
-        (when-let* ((runtime (etaf-runtime-for-buffer buffer)))
-          (let ((etaf-weread--remounting t))
-            (etaf-unmount runtime)
-            (etaf-mount buffer (etaf-weread--app-view model))
-            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))))))))
-
 (defun etaf-weread--cycle-theme ()
-  "Switch the reader to the next palette."
+  "Switch the reader to the next palette.
+The reader's mode cell is its one appearance state, and every View reads it
+while rendering, so the reader and a panel framing it repaint together."
   (interactive)
-  (let ((model (etaf-weread--current-model)))
-    (etaf-weread-cycle-theme model)
-    (etaf-weread--repaint-palette model)))
+  (etaf-weread-cycle-theme (etaf-weread--current-model)))
 
 
 ;;; ---------------------------------------------------------------------------
@@ -390,17 +370,23 @@ the session's timers and pending backend requests."
   :setup
   (progn
     (etaf-theme-provide palette)
+    ;; One appearance state for the reader and the panel that frames it: the
+    ;; palette follows the reader's mode cell, and a host paints from the same
+    ;; cell, so `T' and a title-bar switch repaint both.
+    (etaf-watch (lambda () (etaf-weread-theme-defaults))
+                (lambda (theme _old) (etaf-weread--write session :theme theme))
+                :immediate t :test #'equal :name 'etaf-weread-theme)
+    (when-let* ((surface (etaf-surface-host)))
+      (etaf-surface-declare surface :theme palette
+                            :mode etaf-weread--theme-mode
+                            :modes etaf-weread--theme-modes))
     (etaf-on-mounted
      (lambda ()
        (etaf-weread--start session)
-       ;; Replacing the view to repaint the palette must not fetch the
-       ;; section again; the session already holds it.
-       (unless etaf-weread--remounting
-         (etaf-weread-refresh session))))
+       (etaf-weread-refresh session)))
     (etaf-on-unmounted
      (lambda ()
-       (unless etaf-weread--remounting
-         (etaf-weread--dispose session)))))
+       (etaf-weread--dispose session))))
   :view
   (flex :flex-direction 'column :width '(vw 100) :height '(vh 100)
         :ref 'weread-root :aria-label "微信读书"
