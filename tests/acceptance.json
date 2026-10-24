@@ -205,6 +205,11 @@
    "name": "etaf-weread-tests-declares-its-palette-to-a-host",
    "file": "tests/etaf-weread-tests.el",
    "purpose": "A reader mounted under a host declares its palette, mode labels and mode cell there, and its own theme cycle writes the same cell the host's switch writes."
+  },
+  {
+   "name": "etaf-weread-tests-keys-belong-to-the-root-host",
+   "file": "tests/etaf-weread-tests.el",
+   "purpose": "The reader's keys and its recorded session travel with its View, so a host that mounts it without etaf-app-open keeps working keys and can resolve the mounted reader."
   }
  ]
 }

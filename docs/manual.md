@@ -118,11 +118,15 @@ account and the bundled backend owns the login.
 
 `etaf-weread-theme-mode` seeds the mode a new Emacs session starts with; the
 live mode is one reactive cell that selects the `dark`, `light` or `sepia`
-palette.  `T` writes that cell, and so does the title-bar switch of a panel
-framing the reader: the reader declares the cell, its palette and the three
-mode labels to its host with `etaf-surface-declare`, so a panel paints the
-reader's palette, offers `深`, `浅` and `纸` with the current one selected, and
-switching on either side repaints both.  Views use `etaf-weread-color` and the
+palette, and `auto` follows the appearance its host provides.  `T` writes that
+cell, and so does the title-bar switch of a panel framing the reader: the
+reader declares the cell, its palette and the standard `亮`, `随` and `暗`
+labels to its host with `etaf-surface-declare`, so a panel paints the reader's
+palette, offers the same three-mode switch as every other panel, and switching
+on either side repaints both.  `auto` follows the panel's palette, which
+tracks the Emacs theme; `T` cycles `dark`, `light` and the reader's own
+`sepia` paper, which has no segment in the three-mode switch and shows there
+with none selected.  Views use `etaf-weread-color` and the
 ETAF UI controls in the subtree follow `etaf-weread-theme-defaults`, so every
 palette shares one layout and the reader renders the same surface in every
 Emacs theme.  `etaf-weread-cycle-theme` performs the switch for a scripted or

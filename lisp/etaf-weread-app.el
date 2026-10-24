@@ -90,9 +90,27 @@ selection the reader promises instead of a row under a revealed point."
     ('up (save-excursion (etaf-weread--previous-item)) 'handled)
     (_ 'release)))
 
+(defvar-local etaf-weread--buffer-model nil
+  "Reader session the current buffer shows, or nil.
+An ordinary application buffer records its state through `etaf-app-open'; a
+floating panel or a desktop host mounts the View directly, so the reader
+records its session here when it mounts and the commands find it either way.")
+
+;;;###autoload
+(defun etaf-weread-session (&optional buffer)
+  "Return the reader session mounted in BUFFER-OR-NAME, or nil.
+BUFFER-OR-NAME defaults to the current buffer.  `etaf-weread-open' records its
+session through `etaf-app-open', and a host that mounts `etaf-weread-view'
+records it when the View mounts, so a command or a host finds the reader it
+acts on; a buffer without a mounted reader returns nil."
+  (let ((buffer (get-buffer (or buffer (current-buffer)))))
+    (and (buffer-live-p buffer)
+         (or (buffer-local-value 'etaf-weread--buffer-model buffer)
+             (etaf-app-state buffer)))))
+
 (defun etaf-weread--current-model ()
   "Return the model of the current reader buffer."
-  (or (etaf-app-state)
+  (or (etaf-weread-session)
       (user-error "Current buffer is not an etaf-weread reader")))
 
 ;;; ---------------------------------------------------------------------------
@@ -379,13 +397,30 @@ the session's timers and pending backend requests."
     (when-let* ((surface (etaf-surface-host)))
       (etaf-surface-declare surface :theme palette
                             :mode etaf-weread--theme-mode
-                            :modes etaf-weread--theme-modes))
+                            :modes etaf-weread--surface-modes))
     (etaf-on-mounted
      (lambda ()
+       ;; A host mounts this View without `etaf-app-open', so record the
+       ;; session and the buffer it renders into: the keys find the session,
+       ;; and the background refresh knows whether anyone can see it.
+       (when-let* ((runtime (etaf-current-runtime))
+                   (buffer (and runtime (etaf-runtime-buffer runtime))))
+         (when (buffer-live-p buffer)
+           (plist-put session :buffer buffer)
+           (with-current-buffer buffer
+             (setq-local etaf-weread--buffer-model session))))
        (etaf-weread--start session)
        (etaf-weread-refresh session)))
     (etaf-on-unmounted
      (lambda ()
+       (when-let* ((runtime (etaf-current-runtime))
+                   (buffer (and runtime (etaf-runtime-buffer runtime))))
+         (when (buffer-live-p buffer)
+           (with-current-buffer buffer
+             (when (eq etaf-weread--buffer-model session)
+               (kill-local-variable 'etaf-weread--buffer-model))))
+         (when (eq (plist-get session :buffer) buffer)
+           (plist-put session :buffer nil)))
        (etaf-weread--dispose session))))
   :view
   (flex :flex-direction 'column :width '(vw 100) :height '(vh 100)
@@ -400,6 +435,10 @@ the session's timers and pending backend requests."
         ;; last line clear so those extra pixels land in empty space.
         :padding-bottom '(lh 1)
         :on-direction #'etaf-weread--direction
+        ;; The reader's keys belong to its root Host, so every host that mounts
+        ;; this View keeps them: an ordinary application buffer, a floating
+        ;; panel and a desktop host alike.
+        :keys etaf-weread--bindings
         :color (etaf-weread-color :ink) :bgcolor (etaf-weread-color :bg)
     (flex :width 'stretch :flex-grow 1 :flex-basis 'auto :min-height '(lh 0)
           :align-items 'stretch
@@ -618,12 +657,10 @@ session."
 (defun etaf-weread-view (&optional model)
   "Return the reader View for MODEL.
 MODEL defaults to a new session, exactly as `etaf-weread-open' creates one;
-pass a session from `etaf-weread-create' to embed the reader in your own mount."
+pass a session from `etaf-weread-create' to embed the reader in your own mount.
+The View carries the reader's keys on its root Host, so a host that mounts it
+keeps them."
   (etaf-view (etaf-weread-app :model (or model (etaf-weread-create)))))
-
-(defun etaf-weread--app-view (model)
-  "Return the View `etaf-weread-open' mounts for MODEL, with the root keys."
-  (etaf-view (etaf-weread-app :model model :keys etaf-weread--bindings)))
 
 (defun etaf-weread-open (&optional model)
   "Open the WeChat Reading reader and return its buffer.
@@ -639,7 +676,7 @@ palette background."
   (let* ((model (or model (etaf-weread-create)))
          (buffer
           (etaf-app-open
-           etaf-weread-buffer-name (etaf-weread--app-view model)
+           etaf-weread-buffer-name (etaf-weread-view model)
            :state model
            :background (lambda () (plist-get (etaf-weread--read model :theme) :ui-bg))
            :on-fit (lambda (window)

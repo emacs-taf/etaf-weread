@@ -39,8 +39,10 @@ tabs:
 - Export: the selected book's highlights and thoughts are written as Markdown
   by the bundled `weread` backend.
 - Open in the browser: the selected book opens in the WeChat Reading web reader.
-- Three palettes (dark, light and sepia) with one key, published as `:ui-*`
-  theme tokens so shared ETAF UI controls follow the same colours.
+- Three palettes (dark, light and sepia) on one key, published as `:ui-*`
+  theme tokens so shared ETAF UI controls follow the same colours; inside a
+  floating panel the title bar offers the standard 亮/随/暗 switch, and `随`
+  follows the panel's palette.
 - Window layouts: three columns on a wide frame, a glyph-only section rail with
   one pane on a medium one, and a phone-like stacked layout on a narrow one.
 - Headless sessions for scripts and tests: no buffer, no timer and a scripted

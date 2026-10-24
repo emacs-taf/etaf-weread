@@ -53,16 +53,28 @@ option only seeds it."
 (defvar etaf-weread--theme-mode (etaf-ref etaf-weread-theme-mode)
   "Live appearance of the reader.
 `T' and a panel's title-bar switch both write this cell, and the palette is
-derived from it, so the reader and its host show one state instead of two.")
+derived from it, so the reader and its host show one state instead of two.
+`auto' follows the appearance the host provides; `sepia' is the reader's own
+third palette and has no segment in the standard three-mode switch.")
 
-(defconst etaf-weread--theme-modes
-  '((dark . "深") (light . "浅") (sepia . "纸"))
-  "Appearance modes the reader offers its host, in display order.")
+(defconst etaf-weread--surface-modes
+  '((light . "亮") (auto . "随") (dark . "暗"))
+  "Appearance modes the reader offers its host, in display order.
+They are the standard three a panel's title bar shows, so the reader's switch
+reads like every other panel's; the reader's own `sepia' stays on `T'.")
+
+(defun etaf-weread--resolved-mode (&optional mode)
+  "Return the palette mode MODE paints with, or the reader's live mode.
+`auto' follows the appearance the host provides, so a reader inside a panel
+matches the panel's palette and a standalone reader follows the Emacs theme.
+An unknown mode falls back to `dark'."
+  (let ((mode (or mode (etaf-value etaf-weread--theme-mode))))
+    (if (eq mode 'auto) (etaf-appearance) mode)))
 
 (defun etaf-weread--current-mode (&optional mode)
   "Return the palette mode to paint MODE, or the reader's live mode.
 An unknown mode falls back to `dark'."
-  (let ((mode (or mode (etaf-value etaf-weread--theme-mode))))
+  (let ((mode (etaf-weread--resolved-mode mode)))
     (if (assq mode etaf-weread--palettes) mode 'dark)))
 
 (defun etaf-weread-color (key &optional mode)

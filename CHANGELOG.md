@@ -5,10 +5,21 @@ All notable user-visible changes to ETAF Weread.
 ## Unreleased
 
 - The reader and a panel framing it share one appearance state: `T` and the
-  panel's title-bar switch write the same mode cell, the panel paints the
-  reader's palette, and the panel offers `深`, `浅` and `纸` with the current
-  one selected.  `etaf-weread-theme-mode` now seeds the live mode instead of
-  replacing it at runtime.
+  panel's title-bar switch write the same mode cell, and the panel paints the
+  reader's palette.  `etaf-weread-theme-mode` now seeds the live mode instead
+  of replacing it at runtime.
+
+- The panel's title bar offers the standard `亮`/`随`/`暗` switch like every
+  other panel.  `随` follows the panel's palette, which tracks the Emacs
+  theme; the reader's own `sepia` paper stays on `T` and shows in that switch
+  with no segment selected.
+
+- The reader's keys belong to its root Host, so a floating panel or a desktop
+  host that mounts `etaf-weread-view` keeps them; both host kinds also record
+  the session they mount, and the new `etaf-weread-session` returns it, so a
+  command like `T` acts on the mounted reader instead of signalling that the
+  buffer is not one.  A mounted reader also knows its buffer again, which
+  pauses its background prefetch while no window shows it.
 
 - Local books are removed.  The `本地书` section, the in-frame reading pane and
   every action that existed only for a local file are gone: opening TXT,

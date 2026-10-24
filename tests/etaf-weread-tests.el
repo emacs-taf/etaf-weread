@@ -598,6 +598,8 @@ the timer."
         (progn
           (etaf-mount buffer (etaf-weread-view app)
                       (list :viewport-width 1200 :viewport-height 40))
+          ;; A mounted reader only warms lists while a window shows it.
+          (set-window-buffer (selected-window) buffer)
           (etaf-weread-locate app :shelf)
           (should (etaf-weread-tests--wait
                    (lambda () (> (etaf-weread-tests--request-count :notebook) 0))))
@@ -1053,38 +1055,72 @@ the pipes before reading them.  A crash without JSON keeps the exit status."
         (when (buffer-live-p buffer)
           (with-current-buffer buffer (etaf-weread-close)))))))
 
+(ert-deftest etaf-weread-tests-keys-belong-to-the-root-host ()
+  "The reader's keys travel with its View, so a foreign host keeps them.
+A panel mounts the same View without `etaf-app-open'; the root Host's keys and
+the session the mount records are what make its commands act on the mounted
+reader instead of signalling that the buffer is not one."
+  (let ((session (etaf-weread-tests--session))
+        (buffer (generate-new-buffer " *etaf-weread-tests-keys*")))
+    (unwind-protect
+        (progn
+          (etaf-mount buffer (etaf-weread-view session))
+          (with-current-buffer buffer
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (should (commandp (key-binding (kbd "T"))))
+            (should (eq session (etaf-weread-session)))
+            (should (eq session (etaf-weread-session buffer)))))
+      (when-let* ((runtime (and (buffer-live-p buffer)
+                                (etaf-runtime-for-buffer buffer))))
+        (ignore-errors (etaf-unmount runtime)))
+      (when (buffer-live-p buffer) (kill-buffer buffer)))))
+
 (defvar etaf-weread-tests--surface-model nil
   "Reader session mounted by the surface host during a case.")
 
-(etaf-define-component etaf-weread-tests-surface-host (&key surface)
-  "Provide SURFACE to the reader mounted below."
-  :setup (etaf-surface-provide surface)
+(etaf-define-component etaf-weread-tests-surface-host (&key surface appearance)
+  "Provide SURFACE and APPEARANCE to the reader mounted below."
+  :setup (progn
+           (etaf-surface-provide surface)
+           (when appearance (etaf-appearance-provide appearance)))
   :view (expr (etaf-weread-view etaf-weread-tests--surface-model)))
 
 (ert-deftest etaf-weread-tests-declares-its-palette-to-a-host ()
-  "A panel frames the reader with the reader's own palette and switch.
-`etaf-weread-cycle-theme' writes the same mode cell the host's switch writes,
-so the palette and the selected mode are one appearance state."
+  "A panel frames the reader with the reader's palette and the standard switch.
+The title bar offers the same `亮'/`随'/`暗' as every other panel, `随' follows
+the appearance its host provides, and the reader's own `T' still reaches `纸'."
   (let ((surface (etaf-surface-create))
+        (appearance (etaf-ref 'dark))
         (buffer (generate-new-buffer " *etaf-weread-tests-surface*")))
     (let ((etaf-weread-tests--surface-model (etaf-weread-tests--session)))
       (unwind-protect
           (progn
             (etaf-mount buffer
                         (etaf-view (etaf-weread-tests-surface-host
-                                    :surface surface))
+                                    :surface surface :appearance appearance))
                         (list :viewport-width 1200 :viewport-height 40))
-            (should (equal '((dark . "深") (light . "浅") (sepia . "纸"))
+            (should (equal '((light . "亮") (auto . "随") (dark . "暗"))
                            (etaf-surface-modes surface)))
             (should (equal (etaf-weread-theme-defaults
                             (etaf-value (etaf-surface-mode surface)))
                            (etaf-value (etaf-surface-theme surface))))
-            ;; The reader's own switch writes the same cell.
-            (etaf-weread-cycle-theme etaf-weread-tests--surface-model)
-            (let ((mode (etaf-value (etaf-surface-mode surface))))
-              (should (assq mode (etaf-surface-modes surface)))
-              (should (equal (etaf-weread-theme-defaults mode)
-                             (etaf-value (etaf-surface-theme surface))))))
+            ;; `随' follows the appearance the host provides.
+            (etaf-set-value (etaf-surface-mode surface) 'auto)
+            (etaf-set-value appearance 'light)
+            (etaf-runtime-flush (etaf-runtime-for-buffer buffer))
+            (should (equal (etaf-weread-theme-defaults 'light)
+                           (etaf-value (etaf-surface-theme surface))))
+            ;; The reader's own key keeps cycling, and reaches `纸', which the
+            ;; three-mode switch cannot show.  From `auto' it pins a palette.
+            (should (eq 'light (etaf-weread-cycle-theme
+                                etaf-weread-tests--surface-model)))
+            (should (eq 'sepia (etaf-weread-cycle-theme
+                                etaf-weread-tests--surface-model)))
+            (should (eq 'sepia (etaf-value (etaf-surface-mode surface))))
+            (should (equal (etaf-weread-theme-defaults 'sepia)
+                           (etaf-value (etaf-surface-theme surface))))
+            (should (eq 'dark (etaf-weread-cycle-theme
+                               etaf-weread-tests--surface-model))))
         (when (buffer-live-p buffer) (kill-buffer buffer))))))
 
 (provide 'etaf-weread-tests)

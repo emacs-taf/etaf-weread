@@ -82,6 +82,14 @@
 ;; reported in the echo area.  Return APP, or nil when the logout ran without a
 ;; session.
 ;;
+;; Function: etaf-weread-session (&optional buffer)
+;;;###autoload (autoload 'etaf-weread-session "etaf-weread" nil nil)
+;; Return the reader session mounted in BUFFER-OR-NAME, or nil.
+;; BUFFER-OR-NAME defaults to the current buffer.  `etaf-weread-open` records
+;; its session through `etaf-app-open`, and a host that mounts
+;; `etaf-weread-view` records it when the View mounts, so a command or a host
+;; finds the reader it acts on; a buffer without a mounted reader returns nil.
+;;
 ;; Function: etaf-weread-view (&optional model)
 ;;;###autoload (autoload 'etaf-weread-view "etaf-weread" nil t)
 ;; Return the reader View for MODEL, defaulting to a new session.
@@ -272,7 +280,9 @@
 ;; `sepia'.  The live mode is one reactive cell; the reader's T key and a
 ;; panel's title-bar switch write it, and `etaf-weread-color' and
 ;; `etaf-weread-theme-defaults' read it, so the reader and a panel framing it
-;; share one appearance state.
+;; share one appearance state.  The cell may also hold `auto', which follows
+;; the appearance the host provides; a panel's standard 亮/随/暗 switch writes
+;; that value, while `T' keeps cycling the reader's own three palettes.
 ;;
 ;; Variable: etaf-weread-settings-file
 ;; File that stores the chosen appearance between sessions, default

@@ -476,7 +476,8 @@ signals `etaf-weread-error'."
 
 (defun etaf-weread-cycle-theme (app)
   "Switch APP to the next appearance and return it.
-The order is `dark', `light' then `sepia'; the choice is stored in
+The order is `dark', `light' then `sepia'; from `auto' it pins the light or
+dark palette opposite the appearance it resolves to.  The choice is stored in
 `etaf-weread-settings-file' so the next session starts with it."
   (let* ((order '(dark light sepia))
          (mode (or (cadr (memq (etaf-weread--current-mode) order)) 'dark)))
