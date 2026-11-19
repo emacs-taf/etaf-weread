@@ -584,9 +584,12 @@ ON-PANE drive the tab line; ON-OPEN opens the book in the browser."
 ;;; ---------------------------------------------------------------------------
 
 (defun etaf-weread--viewport-columns ()
-  "Return the mounted viewport width in character columns."
-  (max 20 (floor (/ (or (car (etaf-viewport)) (* 80 (frame-char-width)))
-                    (frame-char-width)))))
+  "Return the mounted viewport width in character columns.
+The canvas's own cell turns the width into columns: `ch' resolves against it,
+so a text scale keeps the reading column where the layout put it."
+  (let ((cell (or (plist-get (ignore-errors (etaf-display-metrics)) :char-width)
+                  (frame-char-width))))
+    (max 20 (floor (/ (or (car (etaf-viewport)) (* 80 cell)) cell)))))
 
 (defconst etaf-weread--footer-hint
   "g 刷新 · v 笔记 · o 浏览器 · E 导出 · T 深浅色 · ? 帮助"
